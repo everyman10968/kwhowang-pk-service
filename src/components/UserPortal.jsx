@@ -1,14 +1,115 @@
-import React, { useState } from 'react';
-import { Package, Clock, FileText, Settings, LogOut, ChevronRight, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Package, Clock, FileText, Settings, LogOut, ChevronRight, CheckCircle2, MapPin } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import OrderCard from './OrderCard';
 
 const UserPortal = ({ onNavigate }) => {
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders', 'services', 'quotes'
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders', 'services'
+  const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState(null);
+  const [userOrders, setUserOrders] = useState([]);
+  const [userQuotations, setUserQuotations] = useState([]);
 
-  const user = {
-    name: "สมชาย ใจดี",
-    email: "somchai@example.com",
-    avatar: "https://ui-avatars.com/api/?name=Somchai+J&background=f97316&color=fff"
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    setLoading(true);
+    try {
+      // 1. Get current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        onNavigate('login');
+        return;
+      }
+      
+      const userId = session.user.id;
+
+      // 2. Fetch Profile & Address separately due to schema FK pointing to auth.users
+      const [profileRes, addressRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', userId).single(),
+        supabase.from('addresses').select('*').eq('user_id', userId)
+      ]);
+        
+      if (profileRes.data) {
+        const userAddresses = addressRes.data || [];
+        setUserProfile({
+          ...profileRes.data,
+          email: session.user.email,
+          defaultAddress: userAddresses.find(a => a.is_default) || userAddresses[0]
+        });
+      }
+
+      // 3. Fetch Orders
+      const { data: orders } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          order_items (
+            id, quantity, unit_price,
+            products (name, image_url)
+          )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (orders) setUserOrders(orders);
+
+      // 4. Fetch Quotations/Services (Assuming phone or name matches if user_id is not strictly linked, or use user_id if we have it)
+      // Since quotations only has name/phone and no user_id, we match by phone or name!
+      // But wait, it's safer to match by phone if available
+      if (profile?.phone) {
+        const { data: quotes } = await supabase
+          .from('quotations')
+          .select('*')
+          .eq('phone', profile.phone)
+          .order('created_at', { ascending: false });
+        if (quotes) setUserQuotations(quotes);
+      } else {
+        const { data: quotes } = await supabase
+          .from('quotations')
+          .select('*')
+          .eq('name', profile?.full_name)
+          .order('created_at', { ascending: false });
+        if (quotes) setUserQuotations(quotes);
+      }
+
+    } catch (err) {
+      console.error(err);
+    }
+    setLoading(false);
   };
+
+  const getOrderStatus = (status) => {
+    switch(status) {
+      case 'pending': return <span className="text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full text-xs font-bold">รอชำระเงิน</span>;
+      case 'paid': return <span className="text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-xs font-bold">เตรียมจัดส่ง</span>;
+      case 'shipped': return <span className="text-purple-600 bg-purple-50 px-3 py-1 rounded-full text-xs font-bold">กำลังจัดส่ง</span>;
+      case 'completed': return <span className="text-green-600 bg-green-50 px-3 py-1 rounded-full text-xs font-bold">สำเร็จ</span>;
+      case 'cancelled': return <span className="text-red-600 bg-red-50 px-3 py-1 rounded-full text-xs font-bold">ยกเลิกแล้ว</span>;
+      default: return <span className="text-gray-600 bg-gray-50 px-3 py-1 rounded-full text-xs font-bold">{status}</span>;
+    }
+  };
+
+  const getQuoteStatus = (status) => {
+    switch(status) {
+      case 'pending': return <span className="text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full text-xs font-bold">รอดำเนินการ</span>;
+      case 'contacted': return <span className="text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-xs font-bold">ติดต่อแล้ว</span>;
+      case 'quoted': return <span className="text-purple-600 bg-purple-50 px-3 py-1 rounded-full text-xs font-bold">เสนอราคาแล้ว</span>;
+      case 'completed': return <span className="text-green-600 bg-green-50 px-3 py-1 rounded-full text-xs font-bold">เสร็จสิ้น</span>;
+      case 'cancelled': return <span className="text-gray-600 bg-gray-100 px-3 py-1 rounded-full text-xs font-bold">ยกเลิก</span>;
+      default: return <span>{status}</span>;
+    }
+  };
+
+  if (loading) {
+    return <div className="max-w-7xl mx-auto px-4 py-12 text-center text-gray-500">กำลังโหลดข้อมูลบัญชี...</div>;
+  }
+
+  if (!userProfile) {
+    return <div className="max-w-7xl mx-auto px-4 py-12 text-center text-red-500">ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบใหม่</div>;
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
@@ -18,12 +119,21 @@ const UserPortal = ({ onNavigate }) => {
         <div className="w-full md:w-1/3 lg:w-1/4">
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mb-6">
             <div className="flex flex-col items-center text-center">
-              <img src={user.avatar} alt={user.name} className="w-24 h-24 rounded-full mb-4 ring-4 ring-primary-50" />
-              <h2 className="text-xl font-bold text-gray-900">{user.name}</h2>
-              <p className="text-sm text-gray-500 mb-6">{user.email}</p>
-              <button className="w-full py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl text-sm font-medium transition-colors border border-gray-200">
-                แก้ไขข้อมูลส่วนตัว
-              </button>
+              <div className="w-24 h-24 rounded-full mb-4 ring-4 ring-primary-50 bg-primary-100 text-primary-600 flex items-center justify-center text-3xl font-bold">
+                {userProfile.full_name ? userProfile.full_name.charAt(0) : 'U'}
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">{userProfile.full_name || 'ผู้ใช้งานใหม่'}</h2>
+              <p className="text-sm text-gray-500 mb-2">{userProfile.email}</p>
+              <p className="text-sm text-gray-500 mb-6">{userProfile.phone || 'ยังไม่ได้เพิ่มเบอร์โทร'}</p>
+              
+              {userProfile.defaultAddress && (
+                <div className="w-full text-left bg-gray-50 p-3 rounded-xl mb-4 border border-gray-100">
+                  <div className="text-xs font-bold text-gray-700 mb-1 flex items-center gap-1"><MapPin size={12}/> ที่อยู่จัดส่งหลัก</div>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {userProfile.defaultAddress.address_line} ต.{userProfile.defaultAddress.district} อ.{userProfile.defaultAddress.amphoe} จ.{userProfile.defaultAddress.province} {userProfile.defaultAddress.zipcode}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -31,7 +141,7 @@ const UserPortal = ({ onNavigate }) => {
             <nav className="space-y-2">
               <button 
                 onClick={() => setActiveTab('orders')}
-                className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${activeTab === 'orders' ? 'bg-primary-50 text-primary-600 font-medium' : 'hover:bg-gray-50 text-gray-700'}`}
+                className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${activeTab === 'orders' ? 'bg-primary-50 text-primary-600 font-bold' : 'hover:bg-gray-50 text-gray-700 font-medium'}`}
               >
                 <div className="flex items-center gap-3">
                   <Package size={20} />
@@ -41,23 +151,13 @@ const UserPortal = ({ onNavigate }) => {
               </button>
               <button 
                 onClick={() => setActiveTab('services')}
-                className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-primary-50 text-primary-600 font-medium' : 'hover:bg-gray-50 text-gray-700'}`}
+                className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-primary-50 text-primary-600 font-bold' : 'hover:bg-gray-50 text-gray-700 font-medium'}`}
               >
                 <div className="flex items-center gap-3">
                   <Clock size={20} />
-                  <span>ติดตามสถานะงานซ่อม</span>
+                  <span>งานบริการ/ใบเสนอราคา</span>
                 </div>
                 {activeTab === 'services' && <ChevronRight size={18} />}
-              </button>
-              <button 
-                onClick={() => setActiveTab('quotes')}
-                className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${activeTab === 'quotes' ? 'bg-primary-50 text-primary-600 font-medium' : 'hover:bg-gray-50 text-gray-700'}`}
-              >
-                <div className="flex items-center gap-3">
-                  <FileText size={20} />
-                  <span>ใบเสนอราคาของฉัน</span>
-                </div>
-                {activeTab === 'quotes' && <ChevronRight size={18} />}
               </button>
             </nav>
           </div>
@@ -77,159 +177,65 @@ const UserPortal = ({ onNavigate }) => {
               onClick={() => setActiveTab('services')}
               className={`flex-shrink-0 px-4 py-2.5 rounded-full text-sm font-medium transition-colors ${activeTab === 'services' ? 'bg-primary-500 text-white' : 'bg-white border border-gray-200 text-gray-700'}`}
             >
-              งานซ่อม/ติดตั้ง
-            </button>
-            <button 
-              onClick={() => setActiveTab('quotes')}
-              className={`flex-shrink-0 px-4 py-2.5 rounded-full text-sm font-medium transition-colors ${activeTab === 'quotes' ? 'bg-primary-500 text-white' : 'bg-white border border-gray-200 text-gray-700'}`}
-            >
-              ใบเสนอราคา
+              งานบริการ/ใบเสนอราคา
             </button>
           </div>
 
           <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100 min-h-[500px]">
             {activeTab === 'orders' && (
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-6">ประวัติการสั่งซื้อล่าสุด</h3>
+                <h3 className="text-2xl font-bold text-gray-900 mb-6">ประวัติการสั่งซื้อของคุณ</h3>
                 <div className="space-y-4">
-                  {/* Order Item */}
-                  <div className="border border-gray-100 rounded-2xl p-5 hover:border-primary-200 transition-colors">
-                    <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-50">
-                      <div>
-                        <span className="text-sm font-bold text-gray-900">ออเดอร์ #ORD-2023-001</span>
-                        <span className="block text-xs text-gray-500 mt-1">วันที่สั่งซื้อ: 15 ต.ค. 2023</span>
-                      </div>
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        จัดส่งแล้ว
-                      </span>
+                  {userOrders.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                      <Package size={48} className="mx-auto text-gray-300 mb-4" />
+                      <p>คุณยังไม่มีประวัติการสั่งซื้อสินค้า</p>
                     </div>
-                    <div className="flex gap-4">
-                      <div className="w-16 h-16 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
-                         <img src="https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&q=80&w=100&h=100" alt="Product" className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="text-sm font-bold text-gray-900">สว่านไร้สาย 20V Max</h4>
-                        <p className="text-sm text-gray-500 mt-1">จำนวน: 1 ชิ้น</p>
-                        <p className="text-sm font-bold text-primary-600 mt-2">฿2,490</p>
-                      </div>
-                      <div className="flex items-end">
-                        <button className="text-sm text-primary-600 font-medium hover:text-primary-700 bg-primary-50 px-3 py-1.5 rounded-lg">
-                          ซื้ออีกครั้ง
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Add an empty state example if needed */}
+                  ) : (
+                    userOrders.map(order => (
+                      <OrderCard key={order.id} order={order} onUpdate={fetchUserData} />
+                    ))
+                  )}
                 </div>
               </div>
             )}
 
             {activeTab === 'services' && (
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-6">ติดตามสถานะงานซ่อม/ติดตั้ง</h3>
-                <div className="space-y-6">
-                  {/* Service Job */}
-                  <div className="border border-gray-100 rounded-2xl p-5 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-1.5 h-full bg-yellow-400"></div>
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <span className="text-sm font-bold text-gray-900">งานซ่อมบำรุง #SRV-0042</span>
-                        <h4 className="text-lg font-bold text-gray-900 mt-1">ล้างแอร์ 3 เครื่อง</h4>
-                        <span className="block text-sm text-gray-500 mt-1">นัดหมาย: พรุ่งนี้, 10:00 น.</span>
-                      </div>
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        รอช่างเข้าพื้นที่
-                      </span>
+                <h3 className="text-2xl font-bold text-gray-900 mb-6">งานบริการและใบเสนอราคา</h3>
+                <div className="space-y-4">
+                  {userQuotations.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                      <Clock size={48} className="mx-auto text-gray-300 mb-4" />
+                      <p>คุณยังไม่มีประวัติการจองคิวช่างหรือขอใบเสนอราคา</p>
                     </div>
-                    
-                    {/* Status Tracker */}
-                    <div className="mt-6 pt-6 border-t border-gray-50">
-                      <div className="relative">
-                        <div className="absolute left-4 top-0 h-full w-0.5 bg-gray-200"></div>
-                        <ul className="space-y-4 relative">
-                          <li className="flex items-start gap-4">
-                            <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center flex-shrink-0 relative z-10 shadow-sm border-2 border-white">
-                              <CheckCircle2 size={16} />
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-gray-900">รับเรื่องแล้ว</p>
-                              <p className="text-xs text-gray-500">18 ต.ค. 2023, 09:30 น.</p>
-                            </div>
-                          </li>
-                          <li className="flex items-start gap-4">
-                            <div className="w-8 h-8 rounded-full bg-primary-500 text-white flex items-center justify-center flex-shrink-0 relative z-10 shadow-sm border-2 border-white">
-                              <span className="w-2 h-2 bg-white rounded-full"></span>
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-gray-900">ยืนยันคิวช่าง</p>
-                              <p className="text-xs text-gray-500">18 ต.ค. 2023, 11:00 น.</p>
-                            </div>
-                          </li>
-                          <li className="flex items-start gap-4">
-                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 relative z-10 shadow-sm border-2 border-white">
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-gray-500">ช่างกำลังเดินทาง</p>
-                            </div>
-                          </li>
-                        </ul>
+                  ) : (
+                    userQuotations.map(quote => (
+                      <div key={quote.id} className="border border-gray-100 rounded-2xl p-5 hover:border-primary-200 transition-colors bg-white shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="flex gap-4">
+                          <div className="w-12 h-12 rounded-full bg-primary-50 text-primary-500 flex items-center justify-center flex-shrink-0">
+                            {quote.service_type === 'air_clean' ? <Clock size={24} /> : <FileText size={24} />}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-gray-900 text-lg">
+                              {quote.service_type === 'air_clean' ? 'ล้างแอร์บ้าน' : 
+                               quote.service_type === 'cctv' ? 'ติดตั้งกล้องวงจรปิด' : 'ขอใบเสนอราคาอื่นๆ'}
+                            </h4>
+                            <p className="text-sm text-gray-500 mt-1">{quote.details}</p>
+                            <p className="text-xs text-gray-400 mt-2">วันที่ขอบริการ: {new Date(quote.created_at).toLocaleDateString('th-TH')}</p>
+                          </div>
+                        </div>
+                        <div className="text-right w-full md:w-auto">
+                          {getQuoteStatus(quote.status)}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'quotes' && (
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-6">ใบเสนอราคาของฉัน</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-sm text-gray-500">
-                        <th className="pb-3 font-medium">เลขที่</th>
-                        <th className="pb-3 font-medium">วันที่ขอ</th>
-                        <th className="pb-3 font-medium">โปรเจกต์</th>
-                        <th className="pb-3 font-medium">สถานะ</th>
-                        <th className="pb-3 font-medium text-right">การจัดการ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm">
-                      <tr className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-4 font-medium text-gray-900">QT-2310-01</td>
-                        <td className="py-4 text-gray-600">16 ต.ค. 2023</td>
-                        <td className="py-4 text-gray-900">อุปกรณ์เซฟตี้สำหรับไซต์งาน</td>
-                        <td className="py-4">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            อนุมัติแล้ว
-                          </span>
-                        </td>
-                        <td className="py-4 text-right">
-                          <button className="text-primary-600 hover:text-primary-800 font-medium bg-primary-50 px-3 py-1.5 rounded-lg">ดูเอกสาร</button>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-4 font-medium text-gray-900">QT-2310-05</td>
-                        <td className="py-4 text-gray-600">18 ต.ค. 2023</td>
-                        <td className="py-4 text-gray-900">เดินระบบไฟอาคารพาณิชย์</td>
-                        <td className="py-4">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                            กำลังตรวจสอบ
-                          </span>
-                        </td>
-                        <td className="py-4 text-right">
-                          <button className="text-gray-400 hover:text-gray-600 font-medium px-3 py-1.5">รายละเอียด</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                    ))
+                  )}
                 </div>
               </div>
             )}
           </div>
         </div>
-
       </div>
     </div>
   );
