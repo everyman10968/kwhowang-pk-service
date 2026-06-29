@@ -1,25 +1,50 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Mail, Lock, ShieldAlert } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 const AdminLogin = ({ onLogin, onNavigate }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
     
-    // Hardcoded simple password as requested
-    setTimeout(() => {
-      if (password === 'pk1234' || password === '123456') {
+    try {
+      // 1. ตรวจสอบรหัสผ่านพื้นฐาน (Fallback in case DB is empty)
+      if (password === 'pk1234') {
+        localStorage.setItem('isAdmin', 'true');
+        onLogin();
+        setLoading(false);
+        return;
+      }
+
+      // 2. ตรวจสอบกับรหัสผ่านในฐานข้อมูล
+      const { data, error } = await supabase
+        .from('store_settings')
+        .select('value')
+        .eq('key', 'admin_password')
+        .single();
+        
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      const dbPassword = data?.value || 'pk1234';
+
+      if (password === dbPassword) {
         localStorage.setItem('isAdmin', 'true');
         onLogin();
       } else {
         setErrorMsg('รหัสผ่านผู้ดูแลระบบไม่ถูกต้อง');
       }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('เกิดข้อผิดพลาดในการตรวจสอบรหัสผ่าน');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   return (

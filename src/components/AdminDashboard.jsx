@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, ShoppingBag, Wrench, FileText, Users, LogOut, Menu, ArrowUpRight, Package } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Wrench, FileText, Users, LogOut, Menu, ArrowUpRight, Package, Tags, Settings } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import AdminProducts from './admin/AdminProducts';
 import AdminOrders from './admin/AdminOrders';
 import AdminCustomers from './admin/AdminCustomers';
 import AdminQuotations from './admin/AdminQuotations';
+import AdminCategories from './admin/AdminCategories';
+import AdminSettings from './admin/AdminSettings';
 
 const AdminDashboard = ({ onNavigate }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -98,6 +100,10 @@ const AdminDashboard = ({ onNavigate }) => {
         return <AdminCustomers />;
       case 'quotations':
         return <AdminQuotations />;
+      case 'categories':
+        return <AdminCategories />;
+      case 'settings':
+        return <AdminSettings />;
       default:
         return <div>กำลังพัฒนา...</div>;
     }
@@ -138,6 +144,13 @@ const AdminDashboard = ({ onNavigate }) => {
             <span className="font-medium">จัดการสินค้า</span>
           </button>
           <button 
+            onClick={() => { setActiveTab('categories'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'categories' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
+          >
+            <Tags size={20} />
+            <span className="font-medium">จัดการหมวดหมู่</span>
+          </button>
+          <button 
             onClick={() => { setActiveTab('orders'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'orders' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
@@ -160,6 +173,13 @@ const AdminDashboard = ({ onNavigate }) => {
           >
             <Users size={20} />
             <span className="font-medium">ลูกค้าทั้งหมด</span>
+          </button>
+          <button 
+            onClick={() => { setActiveTab('settings'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors mt-4 border-t border-gray-800 pt-4 ${activeTab === 'settings' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
+          >
+            <Settings size={20} />
+            <span className="font-medium">ตั้งค่าระบบ</span>
           </button>
         </nav>
 
@@ -192,9 +212,11 @@ const AdminDashboard = ({ onNavigate }) => {
             <h1 className="text-xl font-bold text-gray-900">
               {activeTab === 'dashboard' && 'ภาพรวมระบบ (Dashboard)'}
               {activeTab === 'products' && 'จัดการสต็อกสินค้า (Products)'}
+              {activeTab === 'categories' && 'จัดการหมวดหมู่สินค้า (Categories)'}
               {activeTab === 'orders' && 'จัดการคำสั่งซื้อ (Orders)'}
               {activeTab === 'quotations' && 'จัดการคิวช่าง/ใบเสนอราคา (Bookings)'}
               {activeTab === 'customers' && 'รายชื่อลูกค้า (Customers)'}
+              {activeTab === 'settings' && 'ตั้งค่าระบบ (Settings)'}
             </h1>
           </div>
 
