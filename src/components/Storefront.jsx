@@ -20,6 +20,7 @@ const Storefront = ({ onNavigate }) => {
   });
   const [submitting, setSubmitting] = useState(false);
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -29,7 +30,17 @@ const Storefront = ({ onNavigate }) => {
 
   React.useEffect(() => {
     fetchProducts();
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const { data } = await supabase.from('categories').select('*').order('name');
+      if (data) setCategories(data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -80,15 +91,6 @@ const Storefront = ({ onNavigate }) => {
     { id: 4, title: 'เดินระบบไฟฟ้า', desc: 'ซ่อมไฟ เดินสายไฟใหม่ ติดตั้งเบรกเกอร์ โคมไฟ', icon: <Zap size={32} />, color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
     { id: 5, title: 'ติดตั้งกล้องวงจรปิด', desc: 'CCTV ดูออนไลน์ผ่านมือถือได้ 24 ชม.', icon: <Video size={32} />, color: 'text-red-400', bg: 'bg-red-500/10' },
     { id: 6, title: 'ระบบเน็ตเวิร์ค', desc: 'เดินสายแลน (LAN) ติดตั้ง Wi-Fi แก้ปัญหาเน็ตหลุด', icon: <Network size={32} />, color: 'text-green-400', bg: 'bg-green-500/10' },
-  ];
-
-  const productCategories = [
-    { id: 1, title: 'เครื่องมือช่าง', desc: 'สว่าน หินเจียร ประแจ อุปกรณ์ช่างทุกชนิด', icon: <PenTool size={24} />, image: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&q=80&w=400&h=300' },
-    { id: 2, title: 'วัสดุ และอุปกรณ์', desc: 'สีทาบ้าน หมวกนิรภัย อุปกรณ์ก่อสร้าง', icon: <HardHat size={24} />, image: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=400&h=300' },
-    { id: 3, title: 'อุปกรณ์ไฟฟ้าและแสงสว่าง', desc: 'หลอดไฟ สายไฟ เบรกเกอร์', icon: <Zap size={24} />, image: 'https://images.unsplash.com/photo-1558455850-8de63d4db5ba?auto=format&fit=crop&q=80&w=400&h=300' },
-    { id: 4, title: 'คอมพิวเตอร์และเน็ตเวิร์ค', desc: 'สายแลน เราเตอร์ อะไหล่คอมพิวเตอร์', icon: <Monitor size={24} />, image: 'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&q=80&w=400&h=300' },
-    { id: 5, title: 'กล้องวงจรปิด', desc: 'กล้องวงจรปิด CCTV ทั้งในและนอกบ้าน', icon: <Video size={24} />, image: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&q=80&w=400&h=300' },
-    { id: 6, title: 'อุปกรณ์แอร์และอะไหล่', desc: 'น้ำยาล้างแอร์ ท่อทองแดง อะไหล่แอร์', icon: <ThermometerSnowflake size={24} />, image: 'https://images.unsplash.com/photo-1620608514104-585dcfe1a221?auto=format&fit=crop&q=80&w=400&h=300' },
   ];
 
   return (
@@ -217,7 +219,7 @@ const Storefront = ({ onNavigate }) => {
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {productCategories.map((category) => (
+            {categories.map((category) => (
               <div 
                 key={category.id} 
                 className="group rounded-2xl overflow-hidden bg-gray-800 border border-gray-700 hover:border-primary-500/50 transition-all cursor-pointer"
@@ -230,21 +232,24 @@ const Storefront = ({ onNavigate }) => {
               >
                 <div className="h-48 overflow-hidden relative">
                   <div className="absolute inset-0 bg-gray-900/40 group-hover:bg-transparent transition-colors z-10"></div>
-                  <img 
-                    src={category.image} 
-                    alt={category.title} 
-                    className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" 
-                  />
+                  {category.image_url ? (
+                    <img 
+                      src={category.image_url} 
+                      alt={category.name} 
+                      className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" 
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-700 text-gray-500">
+                      <PenTool size={48} className="opacity-30" />
+                    </div>
+                  )}
                 </div>
                 <div className="p-6">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="text-primary-400">
-                      {category.icon}
-                    </div>
-                    <h3 className="text-lg font-bold text-white">{category.title}</h3>
+                    <h3 className="text-lg font-bold text-white">{category.name}</h3>
                   </div>
                   <p className="text-gray-400 text-sm">
-                    {category.desc}
+                    {category.description || 'เลือกดูสินค้าในหมวดหมู่นี้'}
                   </p>
                 </div>
               </div>
@@ -264,10 +269,10 @@ const Storefront = ({ onNavigate }) => {
                     <button onClick={() => setSelectedCategory(null)} className="text-gray-400 hover:text-white transition-colors">
                       <ArrowRight className="rotate-180" size={24} />
                     </button>
-                    <h2 className="text-3xl md:text-4xl font-bold text-white">สินค้าหมวดหมู่: {selectedCategory.title}</h2>
+                    <h2 className="text-3xl md:text-4xl font-bold text-white">สินค้าหมวดหมู่: {selectedCategory.name}</h2>
                   </div>
                   <p className="text-gray-400 max-w-xl ml-9">
-                    {selectedCategory.desc}
+                    {selectedCategory.description}
                   </p>
                 </>
               ) : (
