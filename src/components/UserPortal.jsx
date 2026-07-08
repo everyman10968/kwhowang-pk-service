@@ -59,18 +59,18 @@ const UserPortal = ({ onNavigate }) => {
       // 4. Fetch Quotations/Services (Assuming phone or name matches if user_id is not strictly linked, or use user_id if we have it)
       // Since quotations only has name/phone and no user_id, we match by phone or name!
       // But wait, it's safer to match by phone if available
-      if (profile?.phone) {
+      if (profileRes.data?.phone) {
         const { data: quotes } = await supabase
           .from('quotations')
           .select('*')
-          .eq('phone', profile.phone)
+          .eq('phone', profileRes.data.phone)
           .order('created_at', { ascending: false });
         if (quotes) setUserQuotations(quotes);
       } else {
         const { data: quotes } = await supabase
           .from('quotations')
           .select('*')
-          .eq('name', profile?.full_name)
+          .eq('name', profileRes.data?.full_name)
           .order('created_at', { ascending: false });
         if (quotes) setUserQuotations(quotes);
       }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, ShoppingBag, Wrench, FileText, Users, LogOut, Menu, ArrowUpRight, Package, Tags, Settings } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Wrench, FileText, Users, LogOut, Menu, ArrowUpRight, Package, Tags, Settings, Receipt } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import AdminProducts from './admin/AdminProducts';
 import AdminOrders from './admin/AdminOrders';
@@ -7,6 +7,7 @@ import AdminCustomers from './admin/AdminCustomers';
 import AdminQuotations from './admin/AdminQuotations';
 import AdminCategories from './admin/AdminCategories';
 import AdminSettings from './admin/AdminSettings';
+import AdminIssueQuotation from './admin/AdminIssueQuotation';
 
 const AdminDashboard = ({ onNavigate }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -100,6 +101,8 @@ const AdminDashboard = ({ onNavigate }) => {
         return <AdminCustomers />;
       case 'quotations':
         return <AdminQuotations />;
+      case 'issue_quotation':
+        return <AdminIssueQuotation />;
       case 'categories':
         return <AdminCategories />;
       case 'settings':
@@ -168,6 +171,13 @@ const AdminDashboard = ({ onNavigate }) => {
             )}
           </button>
           <button 
+            onClick={() => { setActiveTab('issue_quotation'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'issue_quotation' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
+          >
+            <Receipt size={20} />
+            <span className="font-medium">ออกใบเสนอราคา</span>
+          </button>
+          <button 
             onClick={() => { setActiveTab('customers'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'customers' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
@@ -215,6 +225,7 @@ const AdminDashboard = ({ onNavigate }) => {
               {activeTab === 'categories' && 'จัดการหมวดหมู่สินค้า (Categories)'}
               {activeTab === 'orders' && 'จัดการคำสั่งซื้อ (Orders)'}
               {activeTab === 'quotations' && 'จัดการคิวช่าง/ใบเสนอราคา (Bookings)'}
+              {activeTab === 'issue_quotation' && 'ออกใบเสนอราคามาตรฐาน (Quotations)'}
               {activeTab === 'customers' && 'รายชื่อลูกค้า (Customers)'}
               {activeTab === 'settings' && 'ตั้งค่าระบบ (Settings)'}
             </h1>

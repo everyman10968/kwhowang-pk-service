@@ -12,15 +12,7 @@ const AdminLogin = ({ onLogin, onNavigate }) => {
     setErrorMsg('');
     
     try {
-      // 1. ตรวจสอบรหัสผ่านพื้นฐาน (Fallback in case DB is empty)
-      if (password === 'pk1234') {
-        localStorage.setItem('isAdmin', 'true');
-        onLogin();
-        setLoading(false);
-        return;
-      }
-
-      // 2. ตรวจสอบกับรหัสผ่านในฐานข้อมูล
+      // 1. ตรวจสอบกับรหัสผ่านในฐานข้อมูล
       const { data, error } = await supabase
         .from('store_settings')
         .select('value')
@@ -31,6 +23,7 @@ const AdminLogin = ({ onLogin, onNavigate }) => {
         throw error;
       }
 
+      // หากยังไม่มีการตั้งรหัสผ่านในฐานข้อมูล ให้ใช้รหัสผ่านเริ่มต้น 'pk1234'
       const dbPassword = data?.value || 'pk1234';
 
       if (password === dbPassword) {
