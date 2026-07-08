@@ -102,9 +102,9 @@ const AdminDashboard = ({ onNavigate }) => {
       case 'quotations':
         return <AdminQuotations />;
       case 'issue_quotation':
-        return <AdminIssueQuotation shopType="pk" />;
+        return <AdminIssueQuotation key="pk" shopType="pk" />;
       case 'issue_quotation_888':
-        return <AdminIssueQuotation shopType="888" />;
+        return <AdminIssueQuotation key="888" shopType="888" />;
       case 'categories':
         return <AdminCategories />;
       case 'settings':

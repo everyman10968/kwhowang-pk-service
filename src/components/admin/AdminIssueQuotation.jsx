@@ -143,7 +143,7 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
     fetchQuotations();
     fetchProducts();
     fetchCustomers();
-  }, []);
+  }, [shopType]);
 
   const fetchProducts = async () => {
     try {
@@ -489,13 +489,13 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
   const renderShopHeader = (data, docTitle, docNumber) => (
     <div className="flex justify-between items-start border-b-2 border-black pb-2 mb-2">
       <div className="flex gap-3 text-left">
-        <img src="/logo.png" alt="PK Logo" className="w-14 h-14 object-contain border border-gray-200 rounded animate-fade-in" onError={(e) => e.target.style.display = 'none'} />
+        <img src={currentShop.logo} alt="Shop Logo" className="w-14 h-14 object-contain border border-gray-200 rounded animate-fade-in" onError={(e) => e.target.style.display = 'none'} />
         <div>
-          <h1 className="text-lg font-extrabold tracking-tight">ร้าน PK เครื่องมือช่าง</h1>
-          <p className="text-[10px] font-bold text-gray-805 mt-0.5">บริหารงานโดย นายวรศักดิ์ ปัญญารักษ์</p>
-          <p className="text-[10px] text-gray-700">ที่อยู่: 23 หมู่ 7 ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35150</p>
-          <p className="text-[10px] text-gray-700">โทรศัพท์: 093-429-5184</p>
-          <p className="text-[10px] text-gray-700">เลขประจำตัวผู้เสียภาษีอากร: 1103700513329</p>
+          <h1 className="text-lg font-extrabold tracking-tight">{currentShop.name}</h1>
+          <p className="text-[10px] font-bold text-gray-805 mt-0.5">บริหารงานโดย {currentShop.owner}</p>
+          <p className="text-[10px] text-gray-700">ที่อยู่: {currentShop.address}</p>
+          <p className="text-[10px] text-gray-700">โทรศัพท์: {currentShop.phone}</p>
+          <p className="text-[10px] text-gray-700">เลขประจำตัวผู้เสียภาษีอากร: {currentShop.taxId}</p>
         </div>
       </div>
       <div className="text-right">
