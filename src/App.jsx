@@ -83,24 +83,32 @@ function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('isAdmin');
     setIsLoggedIn(false);
     setCurrentView('store');
   };
 
-  // Session Timeout Logic (30 mins)
+  // Session Timeout Logic (30 mins for users, 15 mins for admins)
   useEffect(() => {
     let timeoutId;
+    const isAdminMode = currentView === 'admin' || localStorage.getItem('isAdmin') === 'true';
+
     const resetTimer = () => {
       clearTimeout(timeoutId);
-      if (session) {
+      if (session || isAdminMode) {
+        const timeoutDuration = isAdminMode ? 15 * 60 * 1000 : 30 * 60 * 1000;
+        const message = isAdminMode 
+          ? 'เซสชันผู้ดูแลระบบของคุณหมดอายุเนื่องจากไม่มีการใช้งานเป็นเวลา 15 นาที กรุณาเข้าสู่ระบบใหม่'
+          : 'เซสชันของคุณหมดอายุเนื่องจากไม่มีการใช้งานเป็นเวลา 30 นาที กรุณาเข้าสู่ระบบใหม่';
+
         timeoutId = setTimeout(() => {
           handleLogout();
-          alert('เซสชันของคุณหมดอายุเนื่องจากไม่มีการใช้งานเป็นเวลา 30 นาที กรุณาเข้าสู่ระบบใหม่');
-        }, 30 * 60 * 1000);
+          alert(message);
+        }, timeoutDuration);
       }
     };
 
-    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart'];
+    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'];
     events.forEach(event => window.addEventListener(event, resetTimer));
     resetTimer();
 
@@ -108,7 +116,7 @@ function App() {
       clearTimeout(timeoutId);
       events.forEach(event => window.removeEventListener(event, resetTimer));
     };
-  }, [session]);
+  }, [session, currentView]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">กำลังโหลด...</div>;
 
