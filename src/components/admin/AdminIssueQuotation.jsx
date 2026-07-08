@@ -83,7 +83,33 @@ const bahtText = (num) => {
   return bahtStr + satangStr;
 };
 
-const AdminIssueQuotation = () => {
+const shopConfig = {
+  pk: {
+    name: 'ร้าน PK เครื่องมือช่าง',
+    address: '23 หมู่ 7 ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35150',
+    phone: '093-429-5184',
+    taxId: '1103700513329',
+    owner: 'นายวรศักดิ์ ปัญญารักษ์',
+    logo: '/logo.png',
+    prefix: 'PK-',
+    dnPrefix: 'DN-',
+    rcPrefix: 'RC-'
+  },
+  888: {
+    name: 'ร้าน ทรัพย์ไพศาล 888',
+    address: '258 หมู่7 ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35160',
+    phone: '091-015-3272',
+    taxId: '1350700061580',
+    owner: 'นางสาวจารุวรรณ มีศิลป์',
+    logo: '/logo_888.png',
+    prefix: 'SP-',
+    dnPrefix: 'DN888-',
+    rcPrefix: 'RC888-'
+  }
+};
+
+const AdminIssueQuotation = ({ shopType = 'pk' }) => {
+  const currentShop = shopConfig[shopType] || shopConfig.pk;
   const [quotations, setQuotations] = useState([]);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -171,19 +197,22 @@ const AdminIssueQuotation = () => {
             if (q.details && q.details.trim().startsWith('{')) {
               const detailsObj = JSON.parse(q.details);
               if (detailsObj.is_admin_issued) {
-                return {
-                  ...q,
-                  isAdminIssued: true,
-                  qtNumber: detailsObj.qtNumber || `PK-${q.id}`,
-                  date: detailsObj.date || '',
-                  showDate: detailsObj.showDate !== undefined ? detailsObj.showDate : true,
-                  validityDays: detailsObj.validityDays || '30 วัน',
-                  deliveryDays: detailsObj.deliveryDays || '7 วัน',
-                  clientAddress: detailsObj.clientAddress || '',
-                  items: detailsObj.items || [],
-                  totalAmount: detailsObj.totalAmount || 0,
-                  paymentDate: detailsObj.paymentDate || ''
-                };
+                const itemShopType = detailsObj.shopType || 'pk';
+                if (itemShopType === shopType) {
+                  return {
+                    ...q,
+                    isAdminIssued: true,
+                    qtNumber: detailsObj.qtNumber || `${currentShop.prefix}${q.id}`,
+                    date: detailsObj.date || '',
+                    showDate: detailsObj.showDate !== undefined ? detailsObj.showDate : true,
+                    validityDays: detailsObj.validityDays || '30 วัน',
+                    deliveryDays: detailsObj.deliveryDays || '7 วัน',
+                    clientAddress: detailsObj.clientAddress || '',
+                    items: detailsObj.items || [],
+                    totalAmount: detailsObj.totalAmount || 0,
+                    paymentDate: detailsObj.paymentDate || ''
+                  };
+                }
               }
             }
           } catch (e) {
@@ -206,7 +235,7 @@ const AdminIssueQuotation = () => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    const prefix = `PK-${year}${month}-`;
+    const prefix = `${currentShop.prefix}${year}${month}-`;
 
     // กรองใบเสนอราคาเฉพาะเดือนนี้
     const thisMonthQts = quotations.filter(q => q.qtNumber && q.qtNumber.startsWith(prefix));
@@ -312,6 +341,7 @@ const AdminIssueQuotation = () => {
 
     const detailsJson = JSON.stringify({
       is_admin_issued: true,
+      shopType,
       qtNumber,
       date: qtDate,
       showDate,
@@ -553,7 +583,7 @@ const AdminIssueQuotation = () => {
           </div>
         </div>
 
-        <p className="text-[11px] font-medium text-gray-805 mb-2 text-left">เรื่อง: ร้าน พีเค เครื่องมือช่าง ขอเสนอราคาสินค้า/บริการ ดังรายการต่อไปนี้</p>
+        <p className="text-[11px] font-medium text-gray-805 mb-2 text-left">เรื่อง: {currentShop.name} ขอเสนอราคาสินค้า/บริการ ดังรายการต่อไปนี้</p>
 
         {renderItemsTable(data, true)}
 
@@ -568,7 +598,7 @@ const AdminIssueQuotation = () => {
           <div className="text-center w-56">
             <p className="text-xs mb-8">ขอแสดงความนับถือ</p>
             <div className="border-b border-black w-40 mx-auto mb-1"></div>
-            <p className="text-xs font-bold">นายวรศักดิ์ ปัญญารักษ์</p>
+            <p className="text-xs font-bold">{currentShop.owner}</p>
             <p className="text-[9px] text-gray-500 mt-0.5">ผู้เสนอราคา</p>
           </div>
         </div>
@@ -592,7 +622,7 @@ const AdminIssueQuotation = () => {
 
   // ======== เรนเดอร์ใบส่งของ (Delivery Note) ========
   const renderDeliveryNote = (data) => {
-    const dnNumber = data.qtNumber.replace('PK-', 'DN-');
+    const dnNumber = data.qtNumber.replace(currentShop.prefix, currentShop.dnPrefix);
     return (
       <>
         {renderShopHeader(data, 'ใบส่งของ / DELIVERY NOTE', dnNumber)}
@@ -619,7 +649,7 @@ const AdminIssueQuotation = () => {
           <div className="text-center space-y-4">
             <p className="font-bold">ผู้ส่งของ</p>
             <div className="border-b border-black w-40 mx-auto pt-6"></div>
-            <p className="text-xs font-bold">นายวรศักดิ์ ปัญญารักษ์</p>
+            <p className="text-xs font-bold">{currentShop.owner}</p>
             <p>วันที่ ......./......./.......</p>
           </div>
           <div className="text-center space-y-4 border-l border-black pl-4">
@@ -635,7 +665,7 @@ const AdminIssueQuotation = () => {
 
   // ======== เรนเดอร์ใบเสร็จรับเงิน (Receipt) ========
   const renderReceipt = (data) => {
-    const rcNumber = data.qtNumber.replace('PK-', 'RC-');
+    const rcNumber = data.qtNumber.replace(currentShop.prefix, currentShop.rcPrefix);
     return (
       <>
         {renderShopHeader(data, 'ใบเสร็จรับเงิน / RECEIPT', rcNumber)}
@@ -668,7 +698,7 @@ const AdminIssueQuotation = () => {
           <div className="text-center space-y-4 border-l border-black pl-4">
             <p className="font-bold">ผู้รับเงิน</p>
             <div className="border-b border-black w-40 mx-auto pt-6"></div>
-            <p className="text-xs font-bold">นายวรศักดิ์ ปัญญารักษ์</p>
+            <p className="text-xs font-bold">{currentShop.owner}</p>
             <p>วันที่ ......./......./.......</p>
           </div>
         </div>

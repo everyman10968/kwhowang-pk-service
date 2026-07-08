@@ -12,7 +12,7 @@ import AdminIssueQuotation from './admin/AdminIssueQuotation';
 const AdminDashboard = ({ onNavigate }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  
+
   // Dashboard Stats
   const [stats, setStats] = useState({
     totalSales: 0,
@@ -102,7 +102,9 @@ const AdminDashboard = ({ onNavigate }) => {
       case 'quotations':
         return <AdminQuotations />;
       case 'issue_quotation':
-        return <AdminIssueQuotation />;
+        return <AdminIssueQuotation shopType="pk" />;
+      case 'issue_quotation_888':
+        return <AdminIssueQuotation shopType="888" />;
       case 'categories':
         return <AdminCategories />;
       case 'settings':
@@ -114,7 +116,7 @@ const AdminDashboard = ({ onNavigate }) => {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden w-full relative">
-      
+
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-dark/50 z-40 md:hidden" onClick={() => setIsSidebarOpen(false)}></div>
@@ -132,35 +134,35 @@ const AdminDashboard = ({ onNavigate }) => {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          <button 
+          <button
             onClick={() => { setActiveTab('dashboard'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'dashboard' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
             <LayoutDashboard size={20} />
             <span className="font-medium">ภาพรวมระบบ</span>
           </button>
-          <button 
+          <button
             onClick={() => { setActiveTab('products'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'products' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
             <Package size={20} />
             <span className="font-medium">จัดการสินค้า</span>
           </button>
-          <button 
+          <button
             onClick={() => { setActiveTab('categories'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'categories' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
             <Tags size={20} />
             <span className="font-medium">จัดการหมวดหมู่</span>
           </button>
-          <button 
+          <button
             onClick={() => { setActiveTab('orders'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'orders' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
             <ShoppingBag size={20} />
             <span className="font-medium">จัดการออเดอร์</span>
           </button>
-          <button 
+          <button
             onClick={() => { setActiveTab('quotations'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'quotations' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
@@ -170,21 +172,28 @@ const AdminDashboard = ({ onNavigate }) => {
               <span className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{stats.pendingQuotes}</span>
             )}
           </button>
-          <button 
+          <button
             onClick={() => { setActiveTab('issue_quotation'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'issue_quotation' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
             <Receipt size={20} />
-            <span className="font-medium">ออกใบเสนอราคา</span>
+            <span className="font-medium">PK-ใบเสนอราคา</span>
           </button>
-          <button 
+          <button
+            onClick={() => { setActiveTab('issue_quotation_888'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'issue_quotation_888' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
+          >
+            <Receipt size={20} />
+            <span className="font-medium">888-ใบเสนอราคา</span>
+          </button>
+          <button
             onClick={() => { setActiveTab('customers'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'customers' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
             <Users size={20} />
             <span className="font-medium">ลูกค้าทั้งหมด</span>
           </button>
-          <button 
+          <button
             onClick={() => { setActiveTab('settings'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors mt-4 border-t border-gray-800 pt-4 ${activeTab === 'settings' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
@@ -194,7 +203,7 @@ const AdminDashboard = ({ onNavigate }) => {
         </nav>
 
         <div className="p-4 border-t border-gray-800">
-          <button 
+          <button
             onClick={() => {
               localStorage.removeItem('isAdmin');
               onNavigate('store');
@@ -211,13 +220,13 @@ const AdminDashboard = ({ onNavigate }) => {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 z-10">
-          <button 
+          <button
             onClick={() => setIsSidebarOpen(true)}
             className="md:hidden p-2 text-gray-500 hover:text-gray-700 focus:outline-none"
           >
             <Menu size={24} />
           </button>
-          
+
           <div className="hidden md:block">
             <h1 className="text-xl font-bold text-gray-900">
               {activeTab === 'dashboard' && 'ภาพรวมระบบ (Dashboard)'}
@@ -225,7 +234,8 @@ const AdminDashboard = ({ onNavigate }) => {
               {activeTab === 'categories' && 'จัดการหมวดหมู่สินค้า (Categories)'}
               {activeTab === 'orders' && 'จัดการคำสั่งซื้อ (Orders)'}
               {activeTab === 'quotations' && 'จัดการคิวช่าง/ใบเสนอราคา (Bookings)'}
-              {activeTab === 'issue_quotation' && 'ออกใบเสนอราคามาตรฐาน (Quotations)'}
+              {activeTab === 'issue_quotation' && 'PK-ใบเสนอราคามาตรฐาน (Quotations)'}
+              {activeTab === 'issue_quotation_888' && '888-ใบเสนอราคามาตรฐาน (Quotations)'}
               {activeTab === 'customers' && 'รายชื่อลูกค้า (Customers)'}
               {activeTab === 'settings' && 'ตั้งค่าระบบ (Settings)'}
             </h1>
