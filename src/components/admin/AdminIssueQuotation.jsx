@@ -86,7 +86,7 @@ const bahtText = (num) => {
 const shopConfig = {
   pk: {
     name: 'ร้าน PK เครื่องมือช่าง',
-    address: '23 หมู่ 7 ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35150',
+    address: '23 หมู่ 7 ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35160',
     phone: '093-429-5184',
     taxId: '1103700513329',
     owner: 'นายวรศักดิ์ ปัญญารักษ์',
@@ -1020,7 +1020,7 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
                   <label className="block text-sm font-bold text-gray-700 mb-1">ที่อยู่ลูกค้า</label>
                   <input
                     type="text"
-                    placeholder="เช่น 123 ถ.สุขุมวิท ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35150"
+                    placeholder="เช่น 123 ถ.สุขุมวิท ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35160"
                     value={clientAddress}
                     onChange={(e) => setClientAddress(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"

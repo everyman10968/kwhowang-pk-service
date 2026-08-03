@@ -156,7 +156,7 @@ function App() {
               </div>
               <div>
                 <h3 className="text-white font-bold text-lg mb-4">ติดต่อเรา</h3>
-                <p className="text-gray-400 text-sm mb-2">ที่อยู่: 23 หมู่ 7 ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร</p>
+                <p className="text-gray-400 text-sm mb-2">ที่อยู่: 23 หมู่ 7 ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35160</p>
                 <p className="text-gray-400 text-sm mb-2">โทรศัพท์: 093-429-5184</p>
               </div>
             </div>
