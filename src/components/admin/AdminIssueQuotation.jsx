@@ -2,9 +2,135 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, Plus, Trash2, Printer, Edit2, Search, ArrowLeft, 
   User, MapPin, Phone, Calendar, Clock, DollarSign, CheckCircle2,
-  Package, PlusCircle, Save, XCircle, Download, Truck, Receipt
+  Package, PlusCircle, Save, XCircle, Download, Truck, Receipt,
+  Lock, Unlock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+
+// ตัวเลือกสถานะขั้นตอนการดำเนินการ
+const STATUS_OPTIONS = [
+  { 
+    id: 'quoted', 
+    label: 'กำลังจัดทำ', 
+    shortLabel: '1. กำลังจัดทำ',
+    color: 'blue',
+    bgClass: 'bg-blue-50/40 hover:bg-blue-100/40 border-l-4 border-l-blue-500 text-blue-950',
+    badgeClass: 'bg-blue-100 text-blue-800 border border-blue-200',
+    dotColor: 'bg-blue-500',
+    icon: FileText
+  },
+  { 
+    id: 'delivery_sent', 
+    label: 'ส่งใบส่งของแล้ว', 
+    shortLabel: '2. ใบส่งของ',
+    color: 'amber',
+    bgClass: 'bg-amber-50/40 hover:bg-amber-100/40 border-l-4 border-l-amber-500 text-amber-950',
+    badgeClass: 'bg-amber-100 text-amber-800 border border-amber-200',
+    dotColor: 'bg-amber-500',
+    icon: Truck,
+    defaultLocked: true
+  },
+  { 
+    id: 'receipt_sent', 
+    label: 'ส่งใบเสร็จรับเงินแล้ว', 
+    shortLabel: '3. ใบเสร็จ',
+    color: 'purple',
+    bgClass: 'bg-purple-50/40 hover:bg-purple-100/40 border-l-4 border-l-purple-500 text-purple-950',
+    badgeClass: 'bg-purple-100 text-purple-800 border border-purple-200',
+    dotColor: 'bg-purple-500',
+    icon: Receipt,
+    defaultLocked: true
+  },
+  { 
+    id: 'paid', 
+    label: 'รับเงินเรียบร้อยแล้ว', 
+    shortLabel: '4. รับเงิน',
+    color: 'emerald',
+    bgClass: 'bg-emerald-50/40 hover:bg-emerald-100/40 border-l-4 border-l-emerald-500 text-emerald-950',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    dotColor: 'bg-emerald-500',
+    icon: CheckCircle2,
+    defaultLocked: true,
+    hasPaymentDate: true
+  }
+];
+
+const getStepIndex = (statusId) => {
+  return STATUS_OPTIONS.findIndex(s => s.id === statusId);
+};
+
+const normalizeStatus = (statusStr) => {
+  if (statusStr === 'paid') return 'paid';
+  if (statusStr === 'delivery_sent' || statusStr === 'shipped') return 'delivery_sent';
+  if (statusStr === 'receipt_sent') return 'receipt_sent';
+  return 'quoted';
+};
+
+// ฟังก์ชันแปลงวันที่คริสต์ศักราช (YYYY-MM-DD) เป็นวันที่ไทย (DD/MM/YYYY พ.ศ.)
+const formatThaiDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear() + 543;
+  return `${day}/${month}/${year}`;
+};
+
+// ส่วนประกอบช่องกรอกวันที่รูปแบบไทย (dd/mm/yyyy)
+const ThaiDateInput = ({ value, onChange, disabled, className }) => {
+  const dateInputRef = React.useRef(null);
+  const displayVal = value ? formatThaiDate(value) : '';
+
+  const handleOpenPicker = () => {
+    if (disabled) return;
+    if (dateInputRef.current) {
+      if (typeof dateInputRef.current.showPicker === 'function') {
+        try {
+          dateInputRef.current.showPicker();
+        } catch (e) {
+          dateInputRef.current.focus();
+          dateInputRef.current.click();
+        }
+      } else {
+        dateInputRef.current.focus();
+        dateInputRef.current.click();
+      }
+    }
+  };
+
+  return (
+    <div className={`relative flex items-center w-full ${className || ''}`}>
+      <input
+        type="text"
+        value={displayVal}
+        placeholder="dd/mm/yyyy"
+        readOnly
+        disabled={disabled}
+        onClick={handleOpenPicker}
+        className="w-full px-2.5 py-1.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-800 bg-white cursor-pointer hover:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed pr-7 shadow-2xs"
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={handleOpenPicker}
+        className="absolute right-2 text-gray-400 hover:text-primary-600 disabled:opacity-40"
+      >
+        <Calendar size={14} />
+      </button>
+
+      <input
+        ref={dateInputRef}
+        type="date"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        tabIndex={-1}
+        className="absolute bottom-0 left-0 w-0 h-0 opacity-0 pointer-events-none"
+      />
+    </div>
+  );
+};
 
 // ฟังก์ชันแปลงตัวเลขเป็นคำอ่านเงินบาทภาษาไทย
 const bahtText = (num) => {
@@ -135,6 +261,14 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
   const [items, setItems] = useState([
     { description: '', quantity: 1, unit: 'เครื่อง', unitPrice: 0 }
   ]);
+  const [qtStatus, setQtStatus] = useState('quoted');
+  const [statusDates, setStatusDates] = useState({
+    quoted: new Date().toISOString().split('T')[0],
+    delivery_sent: '',
+    receipt_sent: '',
+    paid: ''
+  });
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
@@ -199,6 +333,18 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
               if (detailsObj.is_admin_issued) {
                 const itemShopType = detailsObj.shopType || 'pk';
                 if (itemShopType === shopType) {
+                  const rawStatus = detailsObj.status || q.status || 'quoted';
+                  const statusKey = normalizeStatus(rawStatus);
+                  const parsedStatusDates = detailsObj.statusDates || {
+                    quoted: detailsObj.date || (q.created_at ? q.created_at.split('T')[0] : ''),
+                    delivery_sent: detailsObj.deliveryDate || '',
+                    receipt_sent: detailsObj.receiptDate || '',
+                    paid: detailsObj.paymentDate || q.paymentDate || ''
+                  };
+                  if (!parsedStatusDates.quoted && (detailsObj.date || q.date)) {
+                    parsedStatusDates.quoted = detailsObj.date || q.date;
+                  }
+
                   return {
                     ...q,
                     isAdminIssued: true,
@@ -210,7 +356,10 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
                     clientAddress: detailsObj.clientAddress || '',
                     items: detailsObj.items || [],
                     totalAmount: detailsObj.totalAmount || 0,
-                    paymentDate: detailsObj.paymentDate || ''
+                    status: statusKey,
+                    statusDates: parsedStatusDates,
+                    paymentDate: parsedStatusDates.paid || detailsObj.paymentDate || q.paymentDate || '',
+                    isUnlocked: detailsObj.isUnlocked === true
                   };
                 }
               }
@@ -255,20 +404,35 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
   };
 
   const handleOpenCreate = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
     setEditingId(null);
     setQtNumber(generateQuotationNumber());
     setClientName('');
     setClientAddress('');
     setClientPhone('');
-    setQtDate(new Date().toISOString().split('T')[0]);
+    setQtDate(todayStr);
     setShowDate(true);
     setValidityDays('30 วัน');
     setDeliveryDays('7 วัน');
     setItems([{ description: '', quantity: 1, unit: 'เครื่อง', unitPrice: 0 }]);
+    setQtStatus('quoted');
+    setStatusDates({
+      quoted: todayStr,
+      delivery_sent: '',
+      receipt_sent: '',
+      paid: ''
+    });
+    setIsUnlocked(false);
     setViewMode('create');
   };
 
   const handleOpenEdit = (qt) => {
+    const existingDates = qt.statusDates || {
+      quoted: qt.date || '',
+      delivery_sent: '',
+      receipt_sent: '',
+      paid: qt.paymentDate || ''
+    };
     setEditingId(qt.id);
     setQtNumber(qt.qtNumber);
     setClientName(qt.contact_name);
@@ -279,6 +443,9 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
     setValidityDays(qt.validityDays);
     setDeliveryDays(qt.deliveryDays);
     setItems(qt.items.length > 0 ? qt.items : [{ description: '', quantity: 1, unit: 'เครื่อง', unitPrice: 0 }]);
+    setQtStatus(qt.status || 'quoted');
+    setStatusDates(existingDates);
+    setIsUnlocked(qt.isUnlocked || false);
     setViewMode('edit');
   };
 
@@ -338,6 +505,15 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
 
     setSaving(true);
     const subtotal = getSubtotal();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const updatedStatusDates = {
+      ...statusDates,
+      quoted: statusDates.quoted || qtDate || todayStr
+    };
+    if (!updatedStatusDates[qtStatus]) {
+      updatedStatusDates[qtStatus] = todayStr;
+    }
 
     const detailsJson = JSON.stringify({
       is_admin_issued: true,
@@ -349,10 +525,12 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
       deliveryDays,
       clientAddress,
       items,
-      totalAmount: subtotal
+      totalAmount: subtotal,
+      status: qtStatus,
+      statusDates: updatedStatusDates,
+      paymentDate: updatedStatusDates.paid || '',
+      isUnlocked: isUnlocked
     });
-
-    const existingStatus = editingId ? (quotations.find(q => q.id === editingId)?.status || 'pending') : 'pending';
 
     const payload = {
       company_name: clientName.includes('บจก') || clientName.includes('บริษัท') ? 'ลูกค้าองค์กร' : 'ลูกค้าทั่วไป',
@@ -360,7 +538,7 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
       phone: clientPhone,
       email: '-',
       details: detailsJson,
-      status: existingStatus
+      status: qtStatus
     };
 
     try {
@@ -408,11 +586,7 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
     }
   };
 
-  const handleConfirmPayment = async (qt) => {
-    const defaultDate = new Date().toLocaleDateString('th-TH');
-    const inputDate = window.prompt('กรุณากรอกวันที่รับเงิน:', defaultDate);
-    if (inputDate === null) return; // กดยกเลิก
-    
+  const handleUpdateRowStatus = async (qt, newStatus, newDateForStatus = null, newUnlockedState = null) => {
     try {
       let detailsObj = {};
       try {
@@ -420,52 +594,47 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
       } catch (e) {
         detailsObj = {};
       }
-      
-      detailsObj.paymentDate = inputDate || defaultDate;
-      
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const currentStatusDates = detailsObj.statusDates || qt.statusDates || {
+        quoted: qt.date || '',
+        delivery_sent: '',
+        receipt_sent: '',
+        paid: qt.paymentDate || ''
+      };
+
+      const dateVal = newDateForStatus || currentStatusDates[newStatus] || todayStr;
+      const updatedStatusDates = {
+        ...currentStatusDates,
+        [newStatus]: dateVal
+      };
+
+      detailsObj.status = newStatus;
+      detailsObj.statusDates = updatedStatusDates;
+      detailsObj.paymentDate = updatedStatusDates.paid || '';
+      if (newUnlockedState !== null) {
+        detailsObj.isUnlocked = newUnlockedState;
+      }
+
       const { error } = await supabase
         .from('quotations')
         .update({
-          status: 'paid',
+          status: newStatus,
           details: JSON.stringify(detailsObj)
         })
         .eq('id', qt.id);
-        
+
       if (error) throw error;
-      alert('ยืนยันรับเงินเรียบร้อยแล้ว');
-      await fetchQuotations();
-    } catch (error) {
-      alert('เกิดข้อผิดพลาด: ' + error.message);
+      fetchQuotations();
+    } catch (err) {
+      alert('เกิดข้อผิดพลาดในการอัปเดตสถานะ: ' + err.message);
     }
   };
 
-  const handleCancelPayment = async (qt) => {
-    if (!window.confirm('คุณต้องการยกเลิกสถานะรับเงินของเอกสารนี้ใช่หรือไม่?')) return;
-    
-    try {
-      let detailsObj = {};
-      try {
-        detailsObj = JSON.parse(qt.details);
-      } catch (e) {
-        detailsObj = {};
-      }
-      
-      delete detailsObj.paymentDate;
-      
-      const { error } = await supabase
-        .from('quotations')
-        .update({
-          status: 'pending',
-          details: JSON.stringify(detailsObj)
-        })
-        .eq('id', qt.id);
-        
-      if (error) throw error;
-      alert('ยกเลิกสถานะรับเงินเรียบร้อยแล้ว');
-      await fetchQuotations();
-    } catch (error) {
-      alert('เกิดข้อผิดพลาด: ' + error.message);
-    }
+  const handleToggleLockRow = async (qt) => {
+    const currentUnlocked = qt.isUnlocked === true;
+    const newUnlockedState = !currentUnlocked;
+    await handleUpdateRowStatus(qt, qt.status, null, newUnlockedState);
   };
 
   const handlePrint = (qt, docType = 'quotation') => {
@@ -502,7 +671,7 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
         <h2 className="text-lg font-extrabold border border-black px-3 py-1 uppercase bg-gray-50">{docTitle}</h2>
         <div className="text-[10px] text-gray-700 mt-2 space-y-0.5">
           <p><span className="font-bold">เลขที่:</span> {docNumber}</p>
-          <p><span className="font-bold">วันที่:</span> {data.showDate && data.date ? new Date(data.date).toLocaleDateString('th-TH') : '..........................'}</p>
+          <p><span className="font-bold">วันที่:</span> {data.showDate && data.date ? formatThaiDate(data.date) : '..........................'}</p>
         </div>
       </div>
     </div>
@@ -783,111 +952,139 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[900px]">
+            <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-xs">
+              <table className="w-full text-left border-collapse min-w-[950px]">
                 <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    <th className="p-4 font-medium">เลขที่ใบเสนอราคา</th>
-                    <th className="p-4 font-medium">วันที่เสนอ</th>
-                    <th className="p-4 font-medium">ลูกค้า (เรียน)</th>
-                    <th className="p-4 font-medium">ยอดเงินรวมสุทธิ</th>
-                    <th className="p-4 font-medium text-right">การจัดการ</th>
+                  <tr className="bg-gray-100/70 text-xs text-gray-600 font-bold uppercase tracking-wider border-b border-gray-200/60">
+                    <th className="py-3.5 px-4 font-bold">เลขที่เอกสาร</th>
+                    <th className="py-3.5 px-4 font-bold">วันที่เสนอ</th>
+                    <th className="py-3.5 px-4 font-bold">สถานะเอกสาร</th>
+                    <th className="py-3.5 px-4 font-bold">ลูกค้า (เรียน)</th>
+                    <th className="py-3.5 px-4 font-bold">ยอดเงินสุทธิ</th>
+                    <th className="py-3.5 px-4 font-bold text-right">เอกสาร & การจัดการ</th>
                   </tr>
                 </thead>
-                <tbody className="text-sm divide-y divide-gray-100">
+                <tbody className="text-sm divide-y divide-gray-100/80 bg-white">
                   {loading ? (
-                    <tr><td colSpan="5" className="p-8 text-center text-gray-500">กำลังโหลดข้อมูล...</td></tr>
+                    <tr><td colSpan="6" className="p-8 text-center text-gray-500 font-medium">กำลังโหลดข้อมูล...</td></tr>
                   ) : filteredQuotations.length === 0 ? (
-                    <tr><td colSpan="5" className="p-8 text-center text-gray-500">ไม่พบข้อมูลใบเสนอราคา</td></tr>
+                    <tr><td colSpan="6" className="p-8 text-center text-gray-500 font-medium">ไม่พบข้อมูลใบเสนอราคา</td></tr>
                   ) : filteredQuotations.map((qt) => {
-                    const isPaid = qt.status === 'paid';
+                    const statusInfo = STATUS_OPTIONS.find(s => s.id === qt.status) || STATUS_OPTIONS[0];
+                    const isRowLocked = qt.status !== 'quoted' && !qt.isUnlocked;
+                    const StatusIcon = statusInfo.icon;
+                    const activeDate = qt.statusDates?.[qt.status] || (qt.status === 'paid' ? qt.paymentDate : qt.date);
+
                     return (
                       <tr 
                         key={qt.id} 
-                        className={`transition-colors border-b border-gray-100 ${
-                          isPaid 
-                            ? 'bg-green-50/60 hover:bg-green-100/50 text-green-900 border-l-4 border-l-green-500' 
-                            : 'hover:bg-gray-50/50'
-                        }`}
+                        className={`transition-all duration-200 border-b border-gray-100 ${statusInfo.bgClass}`}
                       >
-                        <td className="p-4 align-middle">
-                          <span className="font-bold text-gray-900">{qt.qtNumber}</span>
-                          <div className="mt-1">
-                            {isPaid ? (
-                              <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                <CheckCircle2 size={10} /> รับเงินแล้ว ({qt.paymentDate || 'ไม่ระบุวันที่'})
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                รอชำระเงิน
+                        {/* 1. เลขที่เอกสาร */}
+                        <td className="p-4 align-middle whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-gray-900 text-base tracking-tight">{qt.qtNumber}</span>
+                            {isRowLocked && (
+                              <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-100/90 text-[10px] font-bold px-2 py-0.5 rounded-md border border-amber-300 shadow-2xs" title="ล็อคการแก้ไขข้อมูล">
+                                <Lock size={10} /> ล็อค
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="p-4 text-gray-500 align-middle">
-                          {qt.showDate && qt.date ? new Date(qt.date).toLocaleDateString('th-TH') : 'ไม่แสดง'}
+
+                        {/* 2. วันที่เสนอ */}
+                        <td className="p-4 align-middle text-gray-700 font-medium text-xs whitespace-nowrap">
+                          {qt.showDate && qt.date ? formatThaiDate(qt.date) : 'ไม่แสดง'}
                         </td>
-                        <td className="p-4 font-medium text-gray-900 align-middle">
-                          {qt.contact_name}
-                          {qt.phone && <p className="text-xs text-gray-500 mt-0.5">{qt.phone}</p>}
-                        </td>
-                        <td className="p-4 font-bold text-primary-600 align-middle">฿{qt.totalAmount.toLocaleString()}</td>
-                        <td className="p-4 text-right align-middle">
-                          <div className="flex flex-wrap justify-end gap-1.5">
-                            {isPaid ? (
-                              <button
-                                type="button"
-                                onClick={() => handleCancelPayment(qt)}
-                                className="inline-flex items-center gap-1 bg-white border border-orange-200 hover:border-orange-300 text-orange-600 hover:bg-orange-50 px-2.5 py-1.5 rounded-lg font-bold transition-colors text-xs"
-                                title="ยกเลิกการยืนยันรับเงิน"
-                              >
-                                ยกเลิกรับเงิน
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleConfirmPayment(qt)}
-                                className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white px-2.5 py-1.5 rounded-lg font-bold transition-colors text-xs shadow-sm"
-                                title="ยืนยันการรับชำระเงิน"
-                              >
-                                <CheckCircle2 size={13} /> ยืนยันรับเงิน
-                              </button>
+
+                        {/* 3. สถานะเอกสาร */}
+                        <td className="p-4 align-middle whitespace-nowrap">
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold w-max shadow-2xs ${statusInfo.badgeClass}`}>
+                              <StatusIcon size={14} />
+                              {statusInfo.label}
+                            </span>
+                            {activeDate && (
+                              <span className="text-[11px] text-gray-600 font-bold pl-1">
+                                📅 {formatThaiDate(activeDate)}
+                              </span>
                             )}
+                          </div>
+                        </td>
+
+                        {/* 4. ลูกค้า */}
+                        <td className="p-4 align-middle">
+                          <p className="font-bold text-gray-900 text-sm leading-snug">{qt.contact_name}</p>
+                          {qt.phone && <p className="text-xs text-gray-500 mt-0.5 font-medium">{qt.phone}</p>}
+                        </td>
+
+                        {/* 5. ยอดเงินรวมสุทธิ */}
+                        <td className="p-4 align-middle whitespace-nowrap">
+                          <p className="font-extrabold text-primary-600 text-base">฿{qt.totalAmount.toLocaleString()}</p>
+                        </td>
+
+                        {/* 6. เอกสาร & การจัดการ */}
+                        <td className="p-4 align-middle text-right">
+                          <div className="flex flex-wrap justify-end gap-1.5 max-w-[320px] ml-auto">
+                            {/* ปุ่ม พิมพ์ใบเสนอราคา */}
                             <button 
                               type="button"
                               onClick={() => handlePrint(qt, 'quotation')}
-                              className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 hover:border-blue-300 text-blue-600 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg font-medium transition-colors text-xs"
+                              className="inline-flex items-center gap-1 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300 px-2.5 py-1.5 rounded-xl font-medium transition-all text-xs shadow-2xs"
                               title="พิมพ์ใบเสนอราคา"
                             >
                               <Printer size={13} /> ใบเสนอราคา
                             </button>
+                            
+                            {/* ปุ่ม พิมพ์ใบส่งของ */}
                             <button 
                               type="button"
                               onClick={() => handlePrint(qt, 'delivery')}
-                              className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 hover:border-orange-300 text-orange-600 hover:bg-orange-50 px-2.5 py-1.5 rounded-lg font-medium transition-colors text-xs"
+                              className="inline-flex items-center gap-1 bg-white border border-amber-200 text-amber-700 hover:bg-amber-50 hover:border-amber-300 px-2.5 py-1.5 rounded-xl font-medium transition-all text-xs shadow-2xs"
                               title="พิมพ์ใบส่งของ"
                             >
                               <Truck size={13} /> ใบส่งของ
                             </button>
+
+                            {/* ปุ่ม พิมพ์ใบเสร็จ */}
                             <button 
                               type="button"
                               onClick={() => handlePrint(qt, 'receipt')}
-                              className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 hover:border-purple-300 text-purple-600 hover:bg-purple-50 px-2.5 py-1.5 rounded-lg font-medium transition-colors text-xs"
+                              className="inline-flex items-center gap-1 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300 px-2.5 py-1.5 rounded-xl font-medium transition-all text-xs shadow-2xs"
                               title="พิมพ์ใบเสร็จรับเงิน"
                             >
                               <Receipt size={13} /> ใบเสร็จ
                             </button>
+
+                            {/* ปุ่ม ล็อค / ปลดล็อค */}
+                            {qt.status !== 'quoted' && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleLockRow(qt)}
+                                className={`inline-flex items-center gap-1 border px-2.5 py-1.5 rounded-lg font-bold transition-colors text-xs ${
+                                  isRowLocked
+                                    ? 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200'
+                                    : 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200'
+                                }`}
+                                title={isRowLocked ? "คลิกเพื่อปลดล็อคแก้ไข" : "คลิกเพื่อล็อคข้อมูล"}
+                              >
+                                {isRowLocked ? <Lock size={13} /> : <Unlock size={13} />}
+                                {isRowLocked ? 'ปลดล็อค' : 'ล็อคอยู่'}
+                              </button>
+                            )}
+
+                            {/* ปุ่ม แก้ไข */}
                             <button 
                               type="button"
                               onClick={() => handleOpenEdit(qt)}
-                              className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-700 hover:bg-gray-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors text-xs"
+                              className="inline-flex items-center gap-1 bg-white border border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300 px-2.5 py-1.5 rounded-xl font-medium transition-all text-xs shadow-2xs"
                             >
                               <Edit2 size={13} /> แก้ไข
                             </button>
                             <button 
                               type="button"
                               onClick={() => handleDeleteQuotation(qt.id)}
-                              className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 hover:border-red-300 text-red-500 hover:bg-red-50 px-2.5 py-1.5 rounded-lg font-medium transition-colors text-xs"
+                              className="inline-flex items-center gap-1 bg-white border border-gray-200 hover:border-red-300 text-red-500 hover:bg-red-50 px-2.5 py-1.5 rounded-lg font-medium transition-colors text-xs shadow-xs"
                             >
                               <Trash2 size={13} /> ลบ
                             </button>
@@ -902,327 +1099,447 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
           </div>
         )}
 
-        {(viewMode === 'create' || viewMode === 'edit') && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
-            {/* Header */}
-            <div className="flex justify-between items-center border-b-gray-100 pb-4 border-b">
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                className="flex items-center text-gray-500 hover:text-gray-900 font-medium transition-colors"
-              >
-                <ArrowLeft size={18} className="mr-1" /> ย้อนกลับ
-              </button>
-              <h3 className="text-lg font-bold text-gray-900">
-                {viewMode === 'create' ? 'สร้างใบเสนอราคาใหม่' : `แก้ไขใบเสนอราคา: ${qtNumber}`}
-              </h3>
-            </div>
-
-            <form onSubmit={handleSaveQuotation} className="space-y-6">
-
-              {/* ส่วนหัวรายละเอียด */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">เลขที่ใบเสนอราคา</label>
-                  <input
-                    type="text"
-                    value={qtNumber}
-                    onChange={(e) => setQtNumber(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50 font-bold"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">วันที่ออกใบเสนอราคา</label>
-                  <div className="flex items-center gap-3 mb-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowDate(true)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors border ${showDate
-                        ? 'bg-primary-500 text-white border-primary-500'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                        }`}
-                    >
-                      แสดงวันที่
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowDate(false)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors border ${!showDate
-                        ? 'bg-red-500 text-white border-red-500'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                        }`}
-                    >
-                      ไม่แสดง
-                    </button>
-                  </div>
-                  {showDate ? (
-                    <input
-                      type="date"
-                      value={qtDate}
-                      onChange={(e) => setQtDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  ) : (
-                    <p className="text-sm text-gray-400 italic px-1">จะแสดงเป็น "วันที่ .........................." ในใบเสนอราคา</p>
-                  )}
-                </div>
-                <div className="relative">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">เรียน (ชื่อลูกค้า/บริษัท)</label>
-                  <input
-                    type="text"
-                    placeholder="บจก. ตัวอย่าง หรือ คุณสมศรี ใจดี"
-                    value={clientName}
-                    onChange={(e) => {
-                      setClientName(e.target.value);
-                      setShowCustomerDropdown(true);
-                    }}
-                    onFocus={() => setShowCustomerDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    required
-                  />
-                  {showCustomerDropdown && clientName && (
-                    (() => {
-                      const matched = customers.filter(c =>
-                        c.full_name.toLowerCase().includes(clientName.toLowerCase()) ||
-                        (c.phone && c.phone.includes(clientName))
-                      );
-                      if (matched.length === 0) return null;
-                      return (
-                        <div className="absolute top-16 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-lg z-30 max-h-48 overflow-y-auto divide-y divide-gray-50">
-                          {matched.map(c => (
-                            <div
-                              key={c.id}
-                              onClick={() => {
-                                setClientName(c.full_name);
-                                if (c.phone) setClientPhone(c.phone);
-                                if (c.defaultAddress) {
-                                  const addr = c.defaultAddress;
-                                  setClientAddress(`${addr.address_line} ต.${addr.district} อ.${addr.amphoe} จ.${addr.province} ${addr.zipcode}`);
-                                } else {
-                                  setClientAddress('');
-                                }
-                                setShowCustomerDropdown(false);
-                              }}
-                              className="p-3 hover:bg-primary-50 cursor-pointer flex flex-col text-xs text-left"
-                            >
-                              <span className="font-bold text-gray-900">{c.full_name}</span>
-                              <span className="text-gray-500 mt-0.5">เบอร์โทร: {c.phone || '-'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()
-                  )}
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">ที่อยู่ลูกค้า</label>
-                  <input
-                    type="text"
-                    placeholder="เช่น 123 ถ.สุขุมวิท ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35160"
-                    value={clientAddress}
-                    onChange={(e) => setClientAddress(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:col-span-3">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">เบอร์โทรศัพท์ลูกค้า</label>
-                    <input
-                      type="tel"
-                      placeholder="08X-XXX-XXXX"
-                      value={clientPhone}
-                      onChange={(e) => setClientPhone(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">กำหนดยืนราคา</label>
-                    <input
-                      type="text"
-                      value={validityDays}
-                      onChange={(e) => setValidityDays(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">กำหนดส่งมอบสินค้า</label>
-                    <input
-                      type="text"
-                      value={deliveryDays}
-                      onChange={(e) => setDeliveryDays(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* ค้นหาและหยิบดึงสินค้าจากสต็อก */}
-              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 relative">
-                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
-                  <Package size={16} className="text-primary-500" />
-                  ตัวช่วย: ดึงข้อมูลสินค้าเดิมในร้าน
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="พิมพ์รหัสหรือชื่อสินค้าในสต็อกเพื่อดึงข้อมูล..."
-                    value={productSearch}
-                    onChange={(e) => {
-                      setProductSearch(e.target.value);
-                      setShowProductDropdown(true);
-                    }}
-                    onFocus={() => setShowProductDropdown(true)}
-                    className="w-full px-3 py-2 pl-10 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                  />
-                  <Search className="absolute left-3 top-3 text-gray-400" size={16} />
-
-                  {showProductDropdown && productSearch && (
-                    <div className="absolute top-11 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-lg z-20 max-h-60 overflow-y-auto divide-y divide-gray-50">
-                      {filteredProducts.length === 0 ? (
-                        <div className="p-3 text-sm text-gray-500 text-center">ไม่พบสินค้าในสต็อก</div>
-                      ) : (
-                        filteredProducts.map(p => (
-                          <div
-                            key={p.id}
-                            onClick={() => handleAddProductToItems(p)}
-                            className="p-3 hover:bg-primary-50 cursor-pointer flex items-center justify-between text-sm"
-                          >
-                            <span className="font-medium text-gray-900">{p.name}</span>
-                            <span className="font-bold text-primary-600">฿{p.price.toLocaleString()}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* รายการสินค้าในตาราง */}
-              <div className="space-y-4">
-                <h4 className="font-bold text-gray-900 text-md">รายการเสนอราคาสินค้า/บริการ</h4>
-
-                <div className="overflow-x-auto border border-gray-200 rounded-2xl">
-                  <table className="w-full text-left border-collapse min-w-[800px]">
-                    <thead>
-                      <tr className="bg-gray-50 text-xs font-bold text-gray-500 uppercase border-b border-gray-200">
-                        <th className="p-3 w-12 text-center">ลำดับ</th>
-                        <th className="p-3">รายการสินค้า / บริการ</th>
-                        <th className="p-3 w-28 text-center">จำนวน</th>
-                        <th className="p-3 w-28 text-center">หน่วยนับ</th>
-                        <th className="p-3 w-40">ราคาต่อหน่วย (บาท)</th>
-                        <th className="p-3 w-40">รวมเงิน (บาท)</th>
-                        <th className="p-3 w-16 text-center"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 text-sm">
-                      {items.map((item, idx) => (
-                        <tr key={idx}>
-                          <td className="p-3 text-center text-gray-500 font-bold">{idx + 1}</td>
-                          <td className="p-3">
-                            <textarea
-                              rows="2"
-                              placeholder="เช่น แอร์ติดผนังขนาด 9000 BTU&#10;รุ่น PK-Premium (ระบุรายละเอียดเพิ่มเติมได้)"
-                              value={item.description}
-                              onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm resize-y"
-                              required
-                            />
-                          </td>
-                          <td className="p-3">
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 text-center text-sm"
-                              required
-                            />
-                          </td>
-                          <td className="p-3">
-                            <input
-                              type="text"
-                              placeholder="เครื่อง/ชุด"
-                              value={item.unit}
-                              onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
-                              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 text-center text-sm"
-                              required
-                            />
-                          </td>
-                          <td className="p-3">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={item.unitPrice}
-                              onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
-                              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 font-medium text-sm text-right"
-                              required
-                            />
-                          </td>
-                          <td className="p-3 font-bold text-gray-900 text-right">
-                            ฿{(item.quantity * item.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItemRow(idx)}
-                              disabled={items.length === 1}
-                              className="text-red-400 hover:text-red-600 disabled:text-gray-300 transition-colors p-1"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex justify-between items-start gap-4">
-                  <button
-                    type="button"
-                    onClick={handleAddItemRow}
-                    className="border border-primary-500 text-primary-500 hover:bg-primary-50 px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-1.5"
-                  >
-                    <PlusCircle size={16} /> เพิ่มรายการใหม่
-                  </button>
-
-                  {/* แสดงสรุปยอดเงินภาษาไทย */}
-                  <div className="text-right space-y-2 max-w-md">
-                    <div className="text-sm text-gray-500">
-                      <span className="font-bold text-gray-700">จำนวนเงินตัวอักษร:</span> {bahtText(getSubtotal())}
-                    </div>
-                    <div className="text-lg font-bold text-gray-900 border-t border-gray-100 pt-2 flex justify-end gap-10">
-                      <span>ยอดรวมทั้งสิ้น:</span>
-                      <span className="text-primary-600">฿{getSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ปุ่มบันทึก */}
-              <div className="border-t border-gray-100 pt-6 flex justify-end gap-3">
+        {(viewMode === 'create' || viewMode === 'edit') && (() => {
+          const isFormLocked = qtStatus !== 'quoted' && !isUnlocked;
+          return (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+              {/* Header */}
+              <div className="flex justify-between items-center border-b-gray-100 pb-4 border-b">
                 <button
                   type="button"
                   onClick={() => setViewMode('list')}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2.5 rounded-xl font-bold transition-colors"
+                  className="flex items-center text-gray-500 hover:text-gray-900 font-medium transition-colors"
                 >
-                  ยกเลิก
+                  <ArrowLeft size={18} className="mr-1" /> ย้อนกลับ
                 </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="bg-primary-600 hover:bg-primary-700 text-white px-8 py-2.5 rounded-xl font-bold transition-colors flex items-center gap-2 shadow-lg shadow-primary-500/20 disabled:opacity-50"
-                >
-                  <Save size={18} />
-                  {saving ? 'กำลังบันทึก...' : 'บันทึกใบเสนอราคา'}
-                </button>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {viewMode === 'create' ? 'สร้างใบเสนอราคาใหม่' : `แก้ไขใบเสนอราคา: ${qtNumber}`}
+                </h3>
               </div>
-            </form>
-          </div>
-        )}
+
+              {/* กล่องแจ้งเตือนสถานะการล็อคข้อมูล */}
+              {qtStatus !== 'quoted' && (
+                <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-colors ${
+                  isFormLocked ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-blue-50 border-blue-200 text-blue-900'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    {isFormLocked ? <Lock size={22} className="text-amber-600 shrink-0" /> : <Unlock size={22} className="text-blue-600 shrink-0" />}
+                    <div>
+                      <p className="font-bold text-sm">
+                        {isFormLocked 
+                          ? `เอกสารนี้ถูกล็อคการแก้ไข (สถานะ: ${STATUS_OPTIONS.find(s => s.id === qtStatus)?.label})` 
+                          : `เอกสารอยู่ในสถานะ ${STATUS_OPTIONS.find(s => s.id === qtStatus)?.label} (เปิดให้แก้ไขได้)`}
+                      </p>
+                      <p className="text-xs opacity-80">
+                        {isFormLocked 
+                          ? 'ข้อมูลถูกล็อคอัตโนมัติเพื่อป้องกันการแก้ไขโดยไม่ตั้งใจ หากต้องการปรับเปลี่ยน ให้กดปุ่มปลดล็อค' 
+                          : 'คุณกำลังแก้ไขข้อมูลที่ปลดล็อคอยู่'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsUnlocked(!isUnlocked)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0 shadow-sm ${
+                      isFormLocked
+                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {isFormLocked ? <Unlock size={14} /> : <Lock size={14} />}
+                    {isFormLocked ? 'ยกเลิกการล็อค (ปลดล็อคการแก้ไข)' : 'ล็อคข้อมูลตามเดิม'}
+                  </button>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveQuotation} className="space-y-6">
+
+                {/* ส่วนกำหนดสถานะขั้นตอนการดำเนินการ พร้อมระบุวันที่แต่ละขั้นตอน */}
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="block text-sm font-bold text-gray-800 flex items-center gap-2">
+                      <Clock size={16} className="text-primary-500" />
+                      ขั้นตอนการดำเนินการ & กำหนดวันที่ดำเนินงานแต่ละขั้นตอน
+                    </label>
+                    <span className="text-xs text-gray-500 font-medium">* สามารถเลือกและใส่วันที่ของแต่ละขั้นตอนได้เลย</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    {STATUS_OPTIONS.map((opt) => {
+                      const Icon = opt.icon;
+                      const isSelected = qtStatus === opt.id;
+                      const dateVal = statusDates[opt.id] || '';
+
+                      return (
+                        <div 
+                          key={opt.id}
+                          className={`p-3 rounded-xl border flex flex-col justify-between transition-all ${
+                            isSelected 
+                              ? `${opt.badgeClass} ring-2 ring-offset-1 ring-primary-500 shadow-sm` 
+                              : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQtStatus(opt.id);
+                              if (!statusDates[opt.id]) {
+                                setStatusDates({
+                                  ...statusDates,
+                                  [opt.id]: new Date().toISOString().split('T')[0]
+                                });
+                              }
+                            }}
+                            className="flex items-center gap-2 text-xs font-bold text-left mb-2.5 w-full"
+                          >
+                            <Icon size={16} className="shrink-0" />
+                            <span className="flex-1">{opt.label}</span>
+                          </button>
+                          
+                          <div className="mt-auto pt-2 border-t border-gray-200/60">
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1">
+                              วันที่ดำเนินการ (dd/mm/yyyy):
+                            </label>
+                            <ThaiDateInput
+                              value={dateVal}
+                              onChange={(val) => {
+                                setStatusDates({
+                                  ...statusDates,
+                                  [opt.id]: val
+                                });
+                              }}
+                              disabled={isFormLocked && isSelected}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ส่วนหัวรายละเอียด */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">เลขที่ใบเสนอราคา</label>
+                    <input
+                      type="text"
+                      value={qtNumber}
+                      onChange={(e) => setQtNumber(e.target.value)}
+                      disabled={isFormLocked}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50 font-bold disabled:bg-gray-100 disabled:text-gray-400"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">วันที่ออกใบเสนอราคา</label>
+                    <div className="flex items-center gap-3 mb-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowDate(true)}
+                        disabled={isFormLocked}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors border ${showDate
+                          ? 'bg-primary-500 text-white border-primary-500'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                          }`}
+                      >
+                        แสดงวันที่
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowDate(false)}
+                        disabled={isFormLocked}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors border ${!showDate
+                          ? 'bg-red-500 text-white border-red-500'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                          }`}
+                      >
+                        ไม่แสดง
+                      </button>
+                    </div>
+                    {showDate ? (
+                      <ThaiDateInput
+                        value={qtDate}
+                        onChange={(val) => {
+                          setQtDate(val);
+                          setStatusDates({
+                            ...statusDates,
+                            quoted: val
+                          });
+                        }}
+                        disabled={isFormLocked}
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-400 italic px-1">จะแสดงเป็น "วันที่ .........................." ในใบเสนอราคา</p>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <label className="block text-sm font-bold text-gray-700 mb-1">เรียน (ชื่อลูกค้า/บริษัท)</label>
+                    <input
+                      type="text"
+                      placeholder="บจก. ตัวอย่าง หรือ คุณสมศรี ใจดี"
+                      value={clientName}
+                      onChange={(e) => {
+                        setClientName(e.target.value);
+                        setShowCustomerDropdown(true);
+                      }}
+                      onFocus={() => !isFormLocked && setShowCustomerDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                      disabled={isFormLocked}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:text-gray-400"
+                      required
+                    />
+                    {showCustomerDropdown && clientName && (
+                      (() => {
+                        const matched = customers.filter(c =>
+                          c.full_name.toLowerCase().includes(clientName.toLowerCase()) ||
+                          (c.phone && c.phone.includes(clientName))
+                        );
+                        if (matched.length === 0) return null;
+                        return (
+                          <div className="absolute top-16 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-lg z-30 max-h-48 overflow-y-auto divide-y divide-gray-50">
+                            {matched.map(c => (
+                              <div
+                                key={c.id}
+                                onClick={() => {
+                                  setClientName(c.full_name);
+                                  if (c.phone) setClientPhone(c.phone);
+                                  if (c.defaultAddress) {
+                                    const addr = c.defaultAddress;
+                                    setClientAddress(`${addr.address_line} ต.${addr.district} อ.${addr.amphoe} จ.${addr.province} ${addr.zipcode}`);
+                                  } else {
+                                    setClientAddress('');
+                                  }
+                                  setShowCustomerDropdown(false);
+                                }}
+                                className="p-3 hover:bg-primary-50 cursor-pointer flex flex-col text-xs text-left"
+                              >
+                                <span className="font-bold text-gray-900">{c.full_name}</span>
+                                <span className="text-gray-500 mt-0.5">เบอร์โทร: {c.phone || '-'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()
+                    )}
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-bold text-gray-700 mb-1">ที่อยู่ลูกค้า</label>
+                    <input
+                      type="text"
+                      placeholder="เช่น 123 ถ.สุขุมวิท ตำบลค้อวัง อำเภอค้อวัง จังหวัดยโสธร 35160"
+                      value={clientAddress}
+                      onChange={(e) => setClientAddress(e.target.value)}
+                      disabled={isFormLocked}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:col-span-3">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">เบอร์โทรศัพท์ลูกค้า</label>
+                      <input
+                        type="tel"
+                        placeholder="08X-XXX-XXXX"
+                        value={clientPhone}
+                        onChange={(e) => setClientPhone(e.target.value)}
+                        disabled={isFormLocked}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">กำหนดยืนราคา</label>
+                      <input
+                        type="text"
+                        value={validityDays}
+                        onChange={(e) => setValidityDays(e.target.value)}
+                        disabled={isFormLocked}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">กำหนดส่งมอบสินค้า</label>
+                      <input
+                        type="text"
+                        value={deliveryDays}
+                        onChange={(e) => setDeliveryDays(e.target.value)}
+                        disabled={isFormLocked}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ค้นหาและหยิบดึงสินค้าจากสต็อก */}
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 relative">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                    <Package size={16} className="text-primary-500" />
+                    ตัวช่วย: ดึงข้อมูลสินค้าเดิมในร้าน
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="พิมพ์รหัสหรือชื่อสินค้าในสต็อกเพื่อดึงข้อมูล..."
+                      value={productSearch}
+                      onChange={(e) => {
+                        setProductSearch(e.target.value);
+                        setShowProductDropdown(true);
+                      }}
+                      onFocus={() => !isFormLocked && setShowProductDropdown(true)}
+                      disabled={isFormLocked}
+                      className="w-full px-3 py-2 pl-10 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:text-gray-400"
+                    />
+                    <Search className="absolute left-3 top-3 text-gray-400" size={16} />
+
+                    {showProductDropdown && productSearch && (
+                      <div className="absolute top-11 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-lg z-20 max-h-60 overflow-y-auto divide-y divide-gray-50">
+                        {filteredProducts.length === 0 ? (
+                          <div className="p-3 text-sm text-gray-500 text-center">ไม่พบสินค้าในสต็อก</div>
+                        ) : (
+                          filteredProducts.map(p => (
+                            <div
+                              key={p.id}
+                              onClick={() => handleAddProductToItems(p)}
+                              className="p-3 hover:bg-primary-50 cursor-pointer flex items-center justify-between text-sm"
+                            >
+                              <span className="font-medium text-gray-900">{p.name}</span>
+                              <span className="font-bold text-primary-600">฿{p.price.toLocaleString()}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* รายการสินค้าในตาราง */}
+                <div className="space-y-4">
+                  <h4 className="font-bold text-gray-900 text-md">รายการเสนอราคาสินค้า/บริการ</h4>
+
+                  <div className="overflow-x-auto border border-gray-200 rounded-2xl">
+                    <table className="w-full text-left border-collapse min-w-[800px]">
+                      <thead>
+                        <tr className="bg-gray-50 text-xs font-bold text-gray-500 uppercase border-b border-gray-200">
+                          <th className="p-3 w-12 text-center">ลำดับ</th>
+                          <th className="p-3">รายการสินค้า / บริการ</th>
+                          <th className="p-3 w-28 text-center">จำนวน</th>
+                          <th className="p-3 w-28 text-center">หน่วยนับ</th>
+                          <th className="p-3 w-40">ราคาต่อหน่วย (บาท)</th>
+                          <th className="p-3 w-40">รวมเงิน (บาท)</th>
+                          <th className="p-3 w-16 text-center"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 text-sm">
+                        {items.map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="p-3 text-center text-gray-500 font-bold">{idx + 1}</td>
+                            <td className="p-3">
+                              <textarea
+                                rows="2"
+                                placeholder="เช่น แอร์ติดผนังขนาด 9000 BTU&#10;รุ่น PK-Premium (ระบุรายละเอียดเพิ่มเติมได้)"
+                                value={item.description}
+                                onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
+                                disabled={isFormLocked}
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm resize-y disabled:bg-gray-100 disabled:text-gray-400"
+                                required
+                              />
+                            </td>
+                            <td className="p-3">
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
+                                disabled={isFormLocked}
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 text-center text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                                required
+                              />
+                            </td>
+                            <td className="p-3">
+                              <input
+                                type="text"
+                                placeholder="เครื่อง/ชุด"
+                                value={item.unit}
+                                onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
+                                disabled={isFormLocked}
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 text-center text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                                required
+                              />
+                            </td>
+                            <td className="p-3">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={item.unitPrice}
+                                onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
+                                disabled={isFormLocked}
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 font-medium text-sm text-right disabled:bg-gray-100 disabled:text-gray-400"
+                                required
+                              />
+                            </td>
+                            <td className="p-3 font-bold text-gray-900 text-right">
+                              ฿{(item.quantity * item.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItemRow(idx)}
+                                disabled={items.length === 1 || isFormLocked}
+                                className="text-red-400 hover:text-red-600 disabled:text-gray-300 transition-colors p-1"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-between items-start gap-4">
+                    <button
+                      type="button"
+                      onClick={handleAddItemRow}
+                      disabled={isFormLocked}
+                      className="border border-primary-500 text-primary-500 hover:bg-primary-50 px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-1.5 disabled:border-gray-300 disabled:text-gray-400 disabled:bg-gray-50"
+                    >
+                      <PlusCircle size={16} /> เพิ่มรายการใหม่
+                    </button>
+
+                    {/* แสดงสรุปยอดเงินภาษาไทย */}
+                    <div className="text-right space-y-2 max-w-md">
+                      <div className="text-sm text-gray-500">
+                        <span className="font-bold text-gray-700">จำนวนเงินตัวอักษร:</span> {bahtText(getSubtotal())}
+                      </div>
+                      <div className="text-lg font-bold text-gray-900 border-t border-gray-100 pt-2 flex justify-end gap-10">
+                        <span>ยอดรวมทั้งสิ้น:</span>
+                        <span className="text-primary-600">฿{getSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ปุ่มบันทึก */}
+                <div className="border-t border-gray-100 pt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('list')}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2.5 rounded-xl font-bold transition-colors"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="bg-primary-600 hover:bg-primary-700 text-white px-8 py-2.5 rounded-xl font-bold transition-colors flex items-center gap-2 shadow-lg shadow-primary-500/20 disabled:opacity-50"
+                  >
+                    <Save size={18} />
+                    {saving ? 'กำลังบันทึก...' : 'บันทึกใบเสนอราคา'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ==================== PRINT VIEW (ส่วนฟอร์มกระดาษที่จะพิมพ์จริง) ==================== */}
