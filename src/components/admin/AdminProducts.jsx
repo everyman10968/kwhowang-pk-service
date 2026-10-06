@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Image as ImageIcon, Search, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Image as ImageIcon, Search, X, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const AdminProducts = () => {
@@ -7,6 +7,72 @@ const AdminProducts = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [syncing, setSyncing] = useState(false);
+
+  // ฟังก์ชันดึงรายการสินค้าจากใบเสนอราคาทั้งหมดมาบันทึกในตารางสินค้า
+  const handleSyncFromQuotations = async () => {
+    setSyncing(true);
+    try {
+      const { data: currentProds, error: pErr } = await supabase
+        .from('products')
+        .select('name');
+      if (pErr) throw pErr;
+
+      const existingNames = new Set(
+        (currentProds || []).map(p => (p.name || '').trim().toLowerCase())
+      );
+
+      const { data: allQts, error: qErr } = await supabase
+        .from('quotations')
+        .select('details');
+      if (qErr) throw qErr;
+
+      const newItemsToInsert = [];
+      const pendingNames = new Set();
+
+      (allQts || []).forEach(q => {
+        if (q.details && q.details.trim().startsWith('{')) {
+          try {
+            const obj = JSON.parse(q.details);
+            if (obj.items && Array.isArray(obj.items)) {
+              obj.items.forEach(it => {
+                const rawName = (it.description || '').trim();
+                const lowerName = rawName.toLowerCase();
+                if (rawName && !existingNames.has(lowerName) && !pendingNames.has(lowerName)) {
+                  const unitStr = it.unit ? it.unit.trim() : 'ชิ้น';
+                  newItemsToInsert.push({
+                    name: rawName,
+                    price: parseFloat(it.unitPrice) || 0,
+                    stock_quantity: 0,
+                    is_active: true,
+                    description: `หน่วยนับ: ${unitStr}`
+                  });
+                  pendingNames.add(lowerName);
+                }
+              });
+            }
+          } catch (e) {}
+        }
+      });
+
+      if (newItemsToInsert.length > 0) {
+        const batchSize = 50;
+        for (let i = 0; i < newItemsToInsert.length; i += batchSize) {
+          const batch = newItemsToInsert.slice(i, i + batchSize);
+          const { error: insErr } = await supabase.from('products').insert(batch);
+          if (insErr) throw insErr;
+        }
+        await fetchProducts();
+        alert(`ดึงและนำเข้าสินค้าใหม่จากใบเสนอราคาสำเร็จทั้งหมด ${newItemsToInsert.length} รายการ!`);
+      } else {
+        alert('รายการสินค้าจากใบเสนอราคาทั้งหมด มีอยู่ในฐานข้อมูลสต็อกครบถ้วนแล้ว');
+      }
+    } catch (err) {
+      alert('เกิดข้อผิดพลาดในการดึงข้อมูลสินค้า: ' + err.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -202,8 +268,17 @@ const AdminProducts = () => {
             <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
           </div>
           <button 
+            onClick={handleSyncFromQuotations}
+            disabled={syncing}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap border border-gray-200 disabled:opacity-50 cursor-pointer"
+            title="ดึงรายการสินค้าใหม่ๆ จากใบเสนอราคาทั้งหมดเข้าสู่ฐานข้อมูลสินค้า"
+          >
+            <RefreshCw size={15} className={syncing ? 'animate-spin text-primary-500' : 'text-primary-600'} />
+            <span>{syncing ? 'กำลังดึงข้อมูล...' : 'ดึงสินค้าจากใบเสนอราคา'}</span>
+          </button>
+          <button 
             onClick={() => handleOpenModal()}
-            className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
+            className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer"
           >
             <Plus size={16} /> เพิ่มสินค้า
           </button>

@@ -3,7 +3,7 @@ import {
   FileText, Plus, Trash2, Printer, Edit2, Search, ArrowLeft, 
   User, MapPin, Phone, Calendar, Clock, DollarSign, CheckCircle2,
   Package, PlusCircle, Save, XCircle, Download, Truck, Receipt,
-  Lock, Unlock
+  Lock, Unlock, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -272,6 +272,75 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
   const [saving, setSaving] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [syncingProducts, setSyncingProducts] = useState(false);
+
+  // ฟังก์ชันดึงรายการสินค้าจากใบเสนอราคาทั้งหมดมาบันทึกลงตาราง products
+  const handleSyncQuotationProducts = async () => {
+    setSyncingProducts(true);
+    try {
+      // 1. ดึงสินค้าปัจจุบันที่มีอยู่แล้วใน products
+      const { data: currentProds, error: pErr } = await supabase
+        .from('products')
+        .select('name');
+      if (pErr) throw pErr;
+
+      const existingNames = new Set(
+        (currentProds || []).map(p => (p.name || '').trim().toLowerCase())
+      );
+
+      // 2. ดึงรายการใบเสนอราคาทั้งหมด
+      const { data: allQts, error: qErr } = await supabase
+        .from('quotations')
+        .select('details');
+      if (qErr) throw qErr;
+
+      const newItemsToInsert = [];
+      const pendingNames = new Set();
+
+      (allQts || []).forEach(q => {
+        if (q.details && q.details.trim().startsWith('{')) {
+          try {
+            const obj = JSON.parse(q.details);
+            if (obj.items && Array.isArray(obj.items)) {
+              obj.items.forEach(it => {
+                const rawName = (it.description || '').trim();
+                const lowerName = rawName.toLowerCase();
+                if (rawName && !existingNames.has(lowerName) && !pendingNames.has(lowerName)) {
+                  const unitStr = it.unit ? it.unit.trim() : 'ชิ้น';
+                  newItemsToInsert.push({
+                    name: rawName,
+                    price: parseFloat(it.unitPrice) || 0,
+                    stock_quantity: 0,
+                    is_active: true,
+                    description: `หน่วยนับ: ${unitStr}`
+                  });
+                  pendingNames.add(lowerName);
+                }
+              });
+            }
+          } catch (e) {}
+        }
+      });
+
+      if (newItemsToInsert.length > 0) {
+        // บันทึกทีละ 50 รายการ
+        const batchSize = 50;
+        for (let i = 0; i < newItemsToInsert.length; i += batchSize) {
+          const batch = newItemsToInsert.slice(i, i + batchSize);
+          const { error: insErr } = await supabase.from('products').insert(batch);
+          if (insErr) throw insErr;
+        }
+        await fetchProducts();
+        alert(`ดึงและบันทึกรายการสินค้าใหม่จากใบเสนอราคาสำเร็จทั้งหมด ${newItemsToInsert.length} รายการ!`);
+      } else {
+        alert('รายการสินค้าจากใบเสนอราคาทั้งหมด มีอยู่ในฐานข้อมูลสต็อกครบถ้วนแล้ว');
+      }
+    } catch (err) {
+      alert('เกิดข้อผิดพลาดในการดึงข้อมูลสินค้า: ' + err.message);
+    } finally {
+      setSyncingProducts(false);
+    }
+  };
 
   useEffect(() => {
     fetchQuotations();
@@ -475,10 +544,16 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
     const lastItem = items[items.length - 1];
     const isLastEmpty = !lastItem.description && lastItem.unitPrice === 0;
 
+    let unit = 'ชิ้น';
+    if (prod.description && prod.description.includes('หน่วยนับ:')) {
+      const match = prod.description.match(/หน่วยนับ:\s*([^\s\n\r]+)/);
+      if (match && match[1]) unit = match[1];
+    }
+
     const newItem = {
       description: prod.name,
       quantity: 1,
-      unit: 'ชิ้น',
+      unit: unit,
       unitPrice: prod.price
     };
 
@@ -555,6 +630,35 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
           .insert([payload]);
         if (error) throw error;
         alert('บันทึกใบเสนอราคาสำเร็จ');
+      }
+
+      // บันทึกรายการสินค้าใหม่ที่ยังไม่มีใน products ลงฐานข้อมูลอัตโนมัติ
+      try {
+        const existingNames = new Set((products || []).map(p => (p.name || '').trim().toLowerCase()));
+        const newProductsToInsert = [];
+
+        items.forEach(it => {
+          const rawName = (it.description || '').trim();
+          const lowerName = rawName.toLowerCase();
+          if (rawName && !existingNames.has(lowerName)) {
+            const unitStr = it.unit ? it.unit.trim() : 'ชิ้น';
+            newProductsToInsert.push({
+              name: rawName,
+              price: parseFloat(it.unitPrice) || 0,
+              stock_quantity: 0,
+              is_active: true,
+              description: `หน่วยนับ: ${unitStr}`
+            });
+            existingNames.add(lowerName);
+          }
+        });
+
+        if (newProductsToInsert.length > 0) {
+          await supabase.from('products').insert(newProductsToInsert);
+          fetchProducts();
+        }
+      } catch (prodErr) {
+        console.warn('Auto-save products warning:', prodErr);
       }
 
       setViewMode('list');
@@ -1370,10 +1474,22 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
 
                 {/* ค้นหาและหยิบดึงสินค้าจากสต็อก */}
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 relative">
-                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
-                    <Package size={16} className="text-primary-500" />
-                    ตัวช่วย: ดึงข้อมูลสินค้าเดิมในร้าน
-                  </label>
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <label className="text-sm font-bold text-gray-700 flex items-center gap-1.5">
+                      <Package size={16} className="text-primary-500" />
+                      ตัวช่วย: ดึงข้อมูลสินค้าเดิมในร้าน ({products.length} รายการ)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleSyncQuotationProducts}
+                      disabled={syncingProducts || isFormLocked}
+                      className="text-xs font-semibold text-primary-700 hover:text-primary-800 flex items-center gap-1.5 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-lg border border-primary-200 transition-colors disabled:opacity-50 cursor-pointer"
+                      title="กดเพื่อดึงรายการสินค้าใหม่ๆ จากใบเสนอราคาเก่าทั้งหมดเข้าสู่สต็อก"
+                    >
+                      <RefreshCw size={13} className={syncingProducts ? 'animate-spin' : ''} />
+                      <span>{syncingProducts ? 'กำลังดึงข้อมูล...' : 'ดึงสินค้าจากใบเสนอราคาทั้งหมด'}</span>
+                    </button>
+                  </div>
                   <div className="relative">
                     <input
                       type="text"
@@ -1398,10 +1514,15 @@ const AdminIssueQuotation = ({ shopType = 'pk' }) => {
                             <div
                               key={p.id}
                               onClick={() => handleAddProductToItems(p)}
-                              className="p-3 hover:bg-primary-50 cursor-pointer flex items-center justify-between text-sm"
+                              className="p-3 hover:bg-primary-50 cursor-pointer flex items-center justify-between text-sm transition-colors"
                             >
-                              <span className="font-medium text-gray-900">{p.name}</span>
-                              <span className="font-bold text-primary-600">฿{p.price.toLocaleString()}</span>
+                              <div>
+                                <span className="font-medium text-gray-900 block">{p.name}</span>
+                                {p.description && (
+                                  <span className="text-xs text-gray-400 block">{p.description}</span>
+                                )}
+                              </div>
+                              <span className="font-bold text-primary-600 ml-3 whitespace-nowrap">฿{p.price.toLocaleString()}</span>
                             </div>
                           ))
                         )}
