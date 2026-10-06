@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Lock, ShieldAlert, KeyRound } from 'lucide-react';
+import { Save, Lock, ShieldAlert, KeyRound, DatabaseBackup, ArrowRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-const AdminSettings = () => {
+const AdminSettings = ({ onNavigateTab }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -119,6 +119,37 @@ const AdminSettings = () => {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Database Backup Section Card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-orange-50 text-orange-600 p-2 rounded-lg">
+              <DatabaseBackup size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">สำรองฐานข้อมูล (Database Backup)</h2>
+              <p className="text-sm text-gray-500 mt-1">ดาวน์โหลดสำรองข้อมูลตารางทั้งหมดในระบบ เพื่อป้องกันข้อมูลสูญหาย</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <p className="text-sm text-gray-600 leading-relaxed mb-6">
+            คุณสามารถสำรองข้อมูลสินค้า, หมวดหมู่, ลูกค้า, คำสั่งซื้อ และคิวช่าง ทั้งหมดในรูปแบบไฟล์ <b>JSON</b>, <b>SQL Dump (.sql)</b> หรือไฟล์ <b>CSV</b> แยกตารางสำหรับเปิดใน Excel ได้ที่หน้าจัดการสำรองข้อมูล
+          </p>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab && onNavigateTab('backup')}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-sm cursor-pointer"
+          >
+            <DatabaseBackup size={18} className="text-primary-400" />
+            <span>ไปที่หน้าสำรองฐานข้อมูล</span>
+            <ArrowRight size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );

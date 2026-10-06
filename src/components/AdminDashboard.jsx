@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, ShoppingBag, Wrench, FileText, Users, LogOut, Menu, ArrowUpRight, Package, Tags, Settings, Receipt } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Wrench, FileText, Users, LogOut, Menu, ArrowUpRight, Package, Tags, Settings, Receipt, DatabaseBackup } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import AdminProducts from './admin/AdminProducts';
 import AdminOrders from './admin/AdminOrders';
@@ -8,6 +8,7 @@ import AdminQuotations from './admin/AdminQuotations';
 import AdminCategories from './admin/AdminCategories';
 import AdminSettings from './admin/AdminSettings';
 import AdminIssueQuotation from './admin/AdminIssueQuotation';
+import AdminBackup from './admin/AdminBackup';
 
 const AdminDashboard = ({ onNavigate }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -108,7 +109,9 @@ const AdminDashboard = ({ onNavigate }) => {
       case 'categories':
         return <AdminCategories />;
       case 'settings':
-        return <AdminSettings />;
+        return <AdminSettings onNavigateTab={(tab) => setActiveTab(tab)} />;
+      case 'backup':
+        return <AdminBackup />;
       default:
         return <div>กำลังพัฒนา...</div>;
     }
@@ -194,8 +197,16 @@ const AdminDashboard = ({ onNavigate }) => {
             <span className="font-medium">ลูกค้าทั้งหมด</span>
           </button>
           <button
+            onClick={() => { setActiveTab('backup'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeTab === 'backup' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
+          >
+            <DatabaseBackup size={20} className={activeTab === 'backup' ? 'text-white' : 'text-primary-400'} />
+            <span className="font-medium flex-1 text-left">สำรองฐานข้อมูล</span>
+            <span className="bg-primary-500/20 text-primary-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-primary-500/30">DB</span>
+          </button>
+          <button
             onClick={() => { setActiveTab('settings'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors mt-4 border-t border-gray-800 pt-4 ${activeTab === 'settings' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors mt-2 border-t border-gray-800 pt-3 ${activeTab === 'settings' ? 'bg-primary-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}
           >
             <Settings size={20} />
             <span className="font-medium">ตั้งค่าระบบ</span>
@@ -238,10 +249,23 @@ const AdminDashboard = ({ onNavigate }) => {
               {activeTab === 'issue_quotation_888' && '888-ใบเสนอราคามาตรฐาน (Quotations)'}
               {activeTab === 'customers' && 'รายชื่อลูกค้า (Customers)'}
               {activeTab === 'settings' && 'ตั้งค่าระบบ (Settings)'}
+              {activeTab === 'backup' && 'สำรองฐานข้อมูลทั้งหมด (Database Backup)'}
             </h1>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setActiveTab('backup')}
+              title="ไปที่เมนูสำรองฐานข้อมูล"
+              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                activeTab === 'backup'
+                  ? 'bg-primary-500 text-white border-primary-600 shadow-sm'
+                  : 'bg-primary-50 text-primary-700 hover:bg-primary-100 border-primary-200'
+              }`}
+            >
+              <DatabaseBackup size={16} />
+              <span>Backup DB</span>
+            </button>
             <div className="text-right hidden sm:block">
               <p className="text-sm font-bold text-gray-900">ผู้ดูแลระบบ</p>
               <p className="text-xs text-green-600">กำลังใช้งาน</p>
