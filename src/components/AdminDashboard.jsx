@@ -9,6 +9,7 @@ import AdminCategories from './admin/AdminCategories';
 import AdminSettings from './admin/AdminSettings';
 import AdminIssueQuotation from './admin/AdminIssueQuotation';
 import AdminBackup from './admin/AdminBackup';
+import AdminOverview from './admin/AdminOverview';
 
 const AdminDashboard = ({ onNavigate }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -91,7 +92,7 @@ const AdminDashboard = ({ onNavigate }) => {
                 </div>
               ))}
             </div>
-            {/* You can add recent orders table here as a quick view if wanted */}
+            <AdminOverview onNavigateTab={(tab) => setActiveTab(tab)} />
           </div>
         );
       case 'products':
